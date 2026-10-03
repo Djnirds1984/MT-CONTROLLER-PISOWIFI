@@ -15,9 +15,9 @@
  *       runs coin-slot vendo logic, serves voucher API to portal.
  *
  *  Setup Portal (/config):
- *    - WiFi scan button → lists available SSIDs
+ *    - WiFi scan button -> lists available SSIDs
  *    - Dropdown to select SSID + password field
- *    - "Connect & Save" → saves credentials to SPIFFS, reboots to STA mode
+ *    - "Connect & Save" -> saves credentials to SPIFFS, reboots to STA mode
  *
  *  Normal Mode Endpoints:
  *    GET  /status               JSON: MAC, IP, uptime, connection state
@@ -29,17 +29,16 @@
  *
  *  Hardware:
  *    - NodeMCU ESP8266 (ESP-12E / ESP-12F)
- *    - Coin acceptor  →  GPIO D2 (pin 4), active-LOW pulse
- *    - Setup button   →  GPIO D3 (pin 0), active-LOW (built-in pullup)
- *    - Status LED     →  GPIO D4 (pin 2, built-in LED, active-LOW)
+ *    - Coin acceptor  ->  GPIO D2 (pin 4), active-LOW pulse
+ *    - Setup button   ->  GPIO D3 (pin 0), active-LOW (built-in pullup)
+ *    - Status LED     ->  GPIO D4 (pin 2, built-in LED, active-LOW)
  *
  *  Dependencies (Arduino IDE Board Manager):
  *    - esp8266 by ESP8266 Community  (v3.x)
- *    Libraries:
+ *    Libraries (ALL built-in, NO extra installs):
  *    - ESP8266WiFi
  *    - ESP8266WebServer
- *    - SPIFFS  (built-in)
- *    - ArduinoJson v6
+ *    - SPIFFS
  *
  *  Upload:
  *    Board:  "NodeMCU 1.0 (ESP-12E Module)"
@@ -50,8 +49,7 @@
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <FS.h>           // SPIFFS
-#include <ArduinoJson.h>  // v6 — install via Library Manager
+#include <FS.h>           // SPIFFS (built-in)
 
 /* ============================================================
  * 1. CONFIGURATION
@@ -60,11 +58,11 @@
 // Setup mode
 static const char* SETUP_AP_SSID     = "aircoins_coinslot_setup";
 static const char* SETUP_AP_PASSWORD = "";  // empty = open AP
-static const uint8_t PIN_SETUP_BTN   = 0;   // GPIO D0 (active-LOW)
+static const uint8_t PIN_SETUP_BTN   = 0;   // GPIO D3 / flash button (active-LOW)
 
 // Pin definitions
-static const uint8_t PIN_COIN        = 4;   // GPIO D2 — coin acceptor
-static const uint8_t PIN_LED         = 2;   // GPIO D4 — status LED (active-LOW)
+static const uint8_t PIN_COIN        = 4;   // GPIO D2 - coin acceptor
+static const uint8_t PIN_LED         = 2;   // GPIO D4 - status LED (active-LOW)
 
 // Voucher settings
 static const char*   VOUCHER_PREFIX  = "AIR";
@@ -77,7 +75,8 @@ static const uint16_t COIN_DEBOUNCE_MS = 150;
 static const uint16_t HTTP_PORT = 80;
 
 // SPIFFS paths
-static const char* CRED_FILE = "/wifi_cred.json";
+// Credentials stored as plain text: line 1 = SSID, line 2 = password
+static const char* CRED_FILE = "/wifi_cred.txt";
 
 /* ============================================================
  * 2. GLOBAL STATE
@@ -139,8 +138,39 @@ bool loadCredentials();
 bool saveCredentials(const String& ssid, const String& password);
 bool clearCredentials();
 
+String jsonEscape(const String& raw);
+
 /* ============================================================
- * 4. CREDENTIAL STORAGE (SPIFFS)
+ * 4. JSON HELPER (no ArduinoJson dependency)
+ * ============================================================ */
+
+/**
+ * Minimal JSON string escaper — handles the characters that MUST be
+ * escaped inside a JSON string value: " \ and control chars.
+ */
+String jsonEscape(const String& raw) {
+  String out;
+  out.reserve(raw.length() + 8);
+  for (unsigned int i = 0; i < raw.length(); i++) {
+    char c = raw.charAt(i);
+    switch (c) {
+      case '"':  out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n";  break;
+      case '\r': out += "\\r";  break;
+      case '\t': out += "\\t";  break;
+      default:   out += c;      break;
+    }
+  }
+  return out;
+}
+
+/* ============================================================
+ * 5. CREDENTIAL STORAGE (SPIFFS — plain text, 2 lines)
+ *
+ *  Format:
+ *    Line 1: SSID
+ *    Line 2: password  (may be empty)
  * ============================================================ */
 
 bool loadCredentials() {
@@ -150,27 +180,22 @@ bool loadCredentials() {
   File f = SPIFFS.open(CRED_FILE, "r");
   if (!f) return false;
 
-  DynamicJsonDocument doc(256);
-  DeserializationError err = deserializeJson(doc, f);
+  savedSsid     = f.readStringUntil('\n');
+  savedPassword = f.readStringUntil('\n');
   f.close();
 
-  if (err) return false;
-
-  savedSsid     = doc["ssid"] | "";
-  savedPassword = doc["password"] | "";
+  // Trim trailing \r if present
+  savedSsid.trim();
+  savedPassword.trim();
 
   return savedSsid.length() > 0;
 }
 
 bool saveCredentials(const String& ssid, const String& password) {
-  DynamicJsonDocument doc(256);
-  doc["ssid"]     = ssid;
-  doc["password"] = password;
-
   File f = SPIFFS.open(CRED_FILE, "w");
   if (!f) return false;
-
-  serializeJson(doc, f);
+  f.println(ssid);
+  f.println(password);
   f.close();
   return true;
 }
@@ -183,7 +208,7 @@ bool clearCredentials() {
 }
 
 /* ============================================================
- * 5. COIN ACCEPTOR INTERRUPT
+ * 6. COIN ACCEPTOR INTERRUPT
  * ============================================================ */
 
 ICACHE_RAM_ATTR void coinPulseISR() {
@@ -194,7 +219,7 @@ ICACHE_RAM_ATTR void coinPulseISR() {
 }
 
 /* ============================================================
- * 6. VOUCHER CODE GENERATOR
+ * 7. VOUCHER CODE GENERATOR
  * ============================================================ */
 
 String generateVoucherCode() {
@@ -207,7 +232,7 @@ String generateVoucherCode() {
 }
 
 /* ============================================================
- * 7. SPIFFS DATA FILE I/O
+ * 8. SPIFFS DATA FILE I/O
  * ============================================================ */
 
 bool writeDataFile(const String& mac, const String& voucher) {
@@ -234,7 +259,7 @@ String readDataFile(const String& mac) {
 }
 
 /* ============================================================
- * 8. LED HELPER
+ * 9. LED HELPER
  * ============================================================ */
 
 void blinkLed(uint8_t times) {
@@ -247,7 +272,7 @@ void blinkLed(uint8_t times) {
 }
 
 /* ============================================================
- * 9. SETUP MODE — Captive Portal Handlers
+ * 10. SETUP MODE — Captive Portal Handlers
  * ============================================================ */
 
 void handleSetupRoot() {
@@ -262,120 +287,73 @@ void handleConfigPage() {
 <head>
   <meta charset='UTF-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
-  <title>AIRCOINS NETFI — Vendo Setup</title>
+  <title>AIRCOINS NETFI - Vendo Setup</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
-    h1 { color: #2c3e50; text-align: center; }
-    .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    label { display: block; margin: 10px 0 5px; font-weight: bold; color: #34495e; }
-    select, input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 15px; }
-    button:hover { background: #2980b9; }
-    button:disabled { background: #95a5a6; cursor: not-allowed; }
-    .status { padding: 10px; border-radius: 4px; margin-top: 15px; text-align: center; }
-    .status.info { background: #d1ecf1; color: #0c5460; }
-    .status.success { background: #d4edda; color: #155724; }
-    .status.error { background: #f8d7da; color: #721c24; }
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:20px;background:#f5f5f5}
+    h1{color:#2c3e50;text-align:center}
+    .card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:20px}
+    label{display:block;margin:10px 0 5px;font-weight:700;color:#34495e}
+    select,input{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box}
+    button{width:100%;padding:12px;background:#3498db;color:#fff;border:none;border-radius:4px;font-size:16px;cursor:pointer;margin-top:15px}
+    button:hover{background:#2980b9}
+    button:disabled{background:#95a5a6;cursor:not-allowed}
+    .status{padding:10px;border-radius:4px;margin-top:15px;text-align:center}
+    .status.info{background:#d1ecf1;color:#0c5460}
+    .status.success{background:#d4edda;color:#155724}
+    .status.error{background:#f8d7da;color:#721c24}
+    .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
-  <h1>AIRCOINS NETFI — Vendo Setup</h1>
-
+  <h1>AIRCOINS NETFI &mdash; Vendo Setup</h1>
   <div class='card'>
     <label>Hotspot WiFi Network</label>
     <button id='scanBtn' onclick='scanWiFi()'>Scan Hotspot WiFi</button>
-    <div id='scanStatus' class='status info' style='display:none; margin-top:10px;'></div>
-    <select id='ssidSelect' style='margin-top:10px;'>
+    <div id='scanStatus' class='status info' style='display:none;margin-top:10px'></div>
+    <select id='ssidSelect' style='margin-top:10px'>
       <option value=''>-- Scan or enter manually --</option>
     </select>
   </div>
-
   <div class='card'>
     <label>Hotspot Password</label>
     <input type='password' id='wifiPass' placeholder='Enter hotspot password (leave blank if open)'>
-
-    <button id='saveBtn' onclick='saveConfig()'>Connect & Save</button>
-    <div id='saveStatus' class='status info' style='display:none; margin-top:10px;'></div>
+    <button id='saveBtn' onclick='saveConfig()'>Connect &amp; Save</button>
+    <div id='saveStatus' class='status info' style='display:none;margin-top:10px'></div>
   </div>
-
   <script>
-    function scanWiFi() {
-      var btn = document.getElementById('scanBtn');
-      var status = document.getElementById('scanStatus');
-      btn.disabled = true;
-      status.style.display = 'block';
-      status.className = 'status info';
-      status.innerHTML = '<span class="spinner"></span> Scanning for WiFi networks...';
-
-      fetch('/scan')
-        .then(r => r.json())
-        .then(data => {
-          btn.disabled = false;
-          if (data.error) {
-            status.className = 'status error';
-            status.textContent = 'Scan failed: ' + data.error;
-            return;
-          }
-          var select = document.getElementById('ssidSelect');
-          select.innerHTML = '<option value="">-- Select SSID --</option>';
-          data.networks.forEach(n => {
-            var opt = document.createElement('option');
-            opt.value = n.ssid;
-            opt.textContent = n.ssid + ' (' + n.rssi + ' dBm)' + (n.enc ? ' 🔒' : '');
-            select.appendChild(opt);
-          });
-          status.className = 'status success';
-          status.textContent = 'Found ' + data.networks.length + ' networks';
-        })
-        .catch(err => {
-          btn.disabled = false;
-          status.className = 'status error';
-          status.textContent = 'Scan failed: ' + err;
+    function scanWiFi(){
+      var b=document.getElementById('scanBtn'),s=document.getElementById('scanStatus');
+      b.disabled=true;s.style.display='block';s.className='status info';
+      s.innerHTML='<span class="spinner"></span> Scanning for WiFi networks...';
+      fetch('/scan').then(function(r){return r.json()}).then(function(d){
+        b.disabled=false;
+        if(d.error){s.className='status error';s.textContent='Scan failed: '+d.error;return}
+        var sel=document.getElementById('ssidSelect');
+        sel.innerHTML='<option value="">-- Select SSID --</option>';
+        d.networks.forEach(function(n){
+          var o=document.createElement('option');
+          o.value=n.ssid;o.textContent=n.ssid+' ('+n.rssi+' dBm)'+(n.enc?' [locked]':'');
+          sel.appendChild(o);
         });
+        s.className='status success';s.textContent='Found '+d.networks.length+' networks';
+      }).catch(function(e){b.disabled=false;s.className='status error';s.textContent='Scan failed: '+e});
     }
-
-    function saveConfig() {
-      var ssid = document.getElementById('ssidSelect').value;
-      var pass = document.getElementById('wifiPass').value;
-      var btn = document.getElementById('saveBtn');
-      var status = document.getElementById('saveStatus');
-
-      if (!ssid) {
-        status.style.display = 'block';
-        status.className = 'status error';
-        status.textContent = 'Please select or enter an SSID';
-        return;
-      }
-
-      btn.disabled = true;
-      status.style.display = 'block';
-      status.className = 'status info';
-      status.innerHTML = '<span class="spinner"></span> Saving credentials and connecting...';
-
-      fetch('/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'ssid=' + encodeURIComponent(ssid) + '&password=' + encodeURIComponent(pass)
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            status.className = 'status success';
-            status.textContent = '✓ Saved! Rebooting to connect to ' + ssid + '...';
-            setTimeout(() => { alert('Device is rebooting. Close this page.'); }, 1500);
-          } else {
-            status.className = 'status error';
-            status.textContent = 'Save failed: ' + (data.error || 'unknown');
-            btn.disabled = false;
-          }
-        })
-        .catch(err => {
-          status.className = 'status error';
-          status.textContent = 'Save failed: ' + err;
-          btn.disabled = false;
-        });
+    function saveConfig(){
+      var ssid=document.getElementById('ssidSelect').value,
+          pass=document.getElementById('wifiPass').value,
+          b=document.getElementById('saveBtn'),
+          s=document.getElementById('saveStatus');
+      if(!ssid){s.style.display='block';s.className='status error';s.textContent='Please select an SSID';return}
+      b.disabled=true;s.style.display='block';s.className='status info';
+      s.innerHTML='<span class="spinner"></span> Saving credentials and connecting...';
+      fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'ssid='+encodeURIComponent(ssid)+'&password='+encodeURIComponent(pass)
+      }).then(function(r){return r.json()}).then(function(d){
+        if(d.success){s.className='status success';s.textContent='Saved! Rebooting to connect to '+ssid+'...';
+          setTimeout(function(){alert('Device is rebooting. Close this page.')},1500);
+        }else{s.className='status error';s.textContent='Save failed: '+(d.error||'unknown');b.disabled=false}
+      }).catch(function(e){s.className='status error';s.textContent='Save failed: '+e;b.disabled=false});
     }
   </script>
 </body>
@@ -385,67 +363,65 @@ void handleConfigPage() {
   server.send(200, "text/html", html);
 }
 
+/**
+ * GET /scan — scan WiFi networks and return JSON.
+ *
+ * Response shape:
+ *   {"networks":[{"ssid":"...","rssi":-65,"enc":true}, ...]}
+ */
 void handleScanWiFi() {
-  DynamicJsonDocument doc(1024);
-
   int n = WiFi.scanNetworks();
   if (n < 0) {
-    doc["error"] = "WiFi scan failed";
-    String out;
-    serializeJson(doc, out);
-    server.send(500, "application/json", out);
+    server.send(500, "application/json", "{\"error\":\"WiFi scan failed\"}");
     return;
   }
 
-  JsonArray networks = doc.createNestedArray("networks");
+  String json = "{\"networks\":[";
   for (int i = 0; i < n; i++) {
-    JsonObject net = networks.createNestedObject();
-    net["ssid"]  = WiFi.SSID(i);
-    net["rssi"]  = WiFi.RSSI(i);
-    net["enc"]   = (WiFi.encryptionType(i) != ENC_TYPE_NONE);
+    if (i > 0) json += ",";
+    json += "{\"ssid\":\"";
+    json += jsonEscape(WiFi.SSID(i));
+    json += "\",\"rssi\":";
+    json += String(WiFi.RSSI(i));
+    json += ",\"enc\":";
+    json += (WiFi.encryptionType(i) != ENC_TYPE_NONE) ? "true" : "false";
+    json += "}";
   }
+  json += "]}";
 
-  String out;
-  serializeJson(doc, out);
-  server.send(200, "application/json", out);
+  server.send(200, "application/json", json);
 }
 
+/**
+ * POST /save — save WiFi credentials and reboot.
+ *
+ * Body (form-encoded): ssid=...&password=...
+ * Response: {"success":true} or {"success":false,"error":"..."}
+ */
 void handleSaveCredentials() {
   String ssid = server.arg("ssid");
   String pass = server.arg("password");
 
   if (ssid.length() == 0) {
-    DynamicJsonDocument doc(128);
-    doc["success"] = false;
-    doc["error"]   = "SSID is required";
-    String out;
-    serializeJson(doc, out);
-    server.send(400, "application/json", out);
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"SSID is required\"}");
     return;
   }
 
   if (!saveCredentials(ssid, pass)) {
-    DynamicJsonDocument doc(128);
-    doc["success"] = false;
-    doc["error"]   = "Failed to save credentials";
-    String out;
-    serializeJson(doc, out);
-    server.send(500, "application/json", out);
+    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save credentials\"}");
     return;
   }
 
-  DynamicJsonDocument doc(128);
-  doc["success"] = true;
-  doc["message"] = "Credentials saved. Rebooting...";
-  String out;
-  serializeJson(doc, out);
-  server.send(200, "application/json", out);
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Credentials saved. Rebooting...\"}");
 
-  // Schedule reboot after response is sent
+  // Let the response flush, then reboot
   delay(500);
   ESP.restart();
 }
 
+/**
+ * Enter setup mode — starts open AP and captive portal, never returns.
+ */
 void setupModeInit() {
   setupMode = true;
   Serial.println("=== SETUP MODE ===");
@@ -458,7 +434,7 @@ void setupModeInit() {
   Serial.print("AP IP: ");
   Serial.println(apIP);
 
-  // Captive portal: redirect all requests to /config
+  // Captive portal routes
   server.on("/",          HTTP_GET, handleSetupRoot);
   server.on("/config",    HTTP_GET, handleConfigPage);
   server.on("/scan",      HTTP_GET, handleScanWiFi);
@@ -470,9 +446,8 @@ void setupModeInit() {
 
   server.begin();
   Serial.println("Captive portal started at http://192.168.4.1/config");
-  Serial.println("Hold SETUP button again during boot to exit setup mode");
 
-  // Blink LED rapidly to indicate setup mode
+  // Blink LED rapidly to indicate setup mode — loop forever
   while (true) {
     digitalWrite(PIN_LED, LOW);
     delay(100);
@@ -483,26 +458,31 @@ void setupModeInit() {
 }
 
 /* ============================================================
- * 10. NORMAL MODE — Vendo Operation Handlers
+ * 11. NORMAL MODE — Vendo Operation Handlers
  * ============================================================ */
 
 void handleNormalRoot() {
   server.send(200, "text/plain", "AIRCOINS NETFI Vendo OK");
 }
 
+/**
+ * GET /status — JSON health check for admin panel discovery.
+ *
+ * Response:
+ *   {"mac":"AA:BB:CC:DD:EE:FF","ip":"10.1.0.41","ssid":"...","rssi":-65,
+ *    "uptime_ms":123456,"connected":true,"setup_mode":false}
+ */
 void handleStatus() {
-  DynamicJsonDocument doc(256);
-  doc["mac"]       = WiFi.macAddress();
-  doc["ip"]        = WiFi.localIP().toString();
-  doc["ssid"]      = WiFi.SSID();
-  doc["rssi"]      = WiFi.RSSI();
-  doc["uptime_ms"] = millis();
-  doc["connected"] = (WiFi.status() == WL_CONNECTED);
-  doc["setup_mode"]= false;
-
-  String out;
-  serializeJson(doc, out);
-  server.send(200, "application/json", out);
+  String json = "{";
+  json += "\"mac\":\""        + jsonEscape(WiFi.macAddress()) + "\",";
+  json += "\"ip\":\""         + jsonEscape(WiFi.localIP().toString()) + "\",";
+  json += "\"ssid\":\""       + jsonEscape(WiFi.SSID()) + "\",";
+  json += "\"rssi\":"         + String(WiFi.RSSI()) + ",";
+  json += "\"uptime_ms\":"    + String(millis()) + ",";
+  json += "\"connected\":"    + ((WiFi.status() == WL_CONNECTED) ? "true" : "false") + ",";
+  json += "\"setup_mode\":false";
+  json += "}";
+  server.send(200, "application/json", json);
 }
 
 void handleDataFile() {
@@ -530,9 +510,14 @@ void handleGetRates() {
   server.send(200, "text/plain", PROMO_RATES);
 }
 
+/**
+ * POST /checkCoin — portal polls coin status.
+ *
+ * Response (JSON):
+ *   {"status":"true","totalCoin":N,"newCoin":M,"voucher":"...","timeAdded":"...","data":"..."}
+ *   {"status":"false","errorCode":"coin.not.inserted",...}
+ */
 void handleCheckCoin() {
-  String voucher = server.arg("voucher");
-
   noInterrupts();
   uint16_t newPulses = coinPulseCount;
   coinPulseCount = 0;
@@ -541,18 +526,10 @@ void handleCheckCoin() {
   coinTotal += newPulses;
 
   if (newPulses == 0 && coinTotal == 0) {
-    DynamicJsonDocument doc(256);
-    doc["status"]    = "false";
-    doc["errorCode"] = "coin.not.inserted";
-    doc["totalCoin"] = 0;
-    doc["remainTime"] = 30000;
-    doc["waitTime"]   = 30000;
-    doc["validity"]   = "10";
-    doc["timeAdded"]  = "0";
-    doc["data"]       = "0";
-    String out;
-    serializeJson(doc, out);
-    server.send(200, "application/json", out);
+    String json = "{\"status\":\"false\",\"errorCode\":\"coin.not.inserted\","
+                  "\"totalCoin\":0,\"remainTime\":30000,\"waitTime\":30000,"
+                  "\"validity\":\"10\",\"timeAdded\":\"0\",\"data\":\"0\"}";
+    server.send(200, "application/json", json);
     return;
   }
 
@@ -570,31 +547,32 @@ void handleCheckCoin() {
 
     blinkLed(newPulses);
 
-    DynamicJsonDocument doc(256);
-    doc["status"]     = "true";
-    doc["totalCoin"]  = coinTotal;
-    doc["newCoin"]    = newPulses;
-    doc["voucher"]    = code;
-    doc["timeAdded"]  = String(newPulses * 600);
-    doc["data"]       = String(newPulses * 100);
-    String out;
-    serializeJson(doc, out);
-    server.send(200, "application/json", out);
+    String json = "{\"status\":\"true\","
+                  "\"totalCoin\":" + String(coinTotal) + ","
+                  "\"newCoin\":" + String(newPulses) + ","
+                  "\"voucher\":\"" + jsonEscape(code) + "\","
+                  "\"timeAdded\":\"" + String(newPulses * 600) + "\","
+                  "\"data\":\"" + String(newPulses * 100) + "\"}";
+    server.send(200, "application/json", json);
     return;
   }
 
-  DynamicJsonDocument doc(256);
-  doc["status"]     = "true";
-  doc["totalCoin"]  = coinTotal;
-  doc["newCoin"]    = 0;
-  doc["voucher"]    = pendingVoucher;
-  doc["timeAdded"]  = String(coinTotal * 600);
-  doc["data"]       = String(coinTotal * 100);
-  String out;
-  serializeJson(doc, out);
-  server.send(200, "application/json", out);
+  // Coins were inserted earlier, still waiting
+  String json = "{\"status\":\"true\","
+                "\"totalCoin\":" + String(coinTotal) + ","
+                "\"newCoin\":0,"
+                "\"voucher\":\"" + jsonEscape(pendingVoucher) + "\","
+                "\"timeAdded\":\"" + String(coinTotal * 600) + "\","
+                "\"data\":\"" + String(coinTotal * 100) + "\"}";
+  server.send(200, "application/json", json);
 }
 
+/**
+ * POST /generateVoucher — portal requests a voucher for a MAC.
+ *
+ * Body (form-encoded): mac={MAC}
+ * Response: {"status":"true","voucher":"AIRxxxxxx"}
+ */
 void handleGenerateVoucher() {
   String mac = server.arg("mac");
   mac.toUpperCase();
@@ -603,12 +581,7 @@ void handleGenerateVoucher() {
   mac.replace(".", "");
 
   if (mac.length() != 12) {
-    DynamicJsonDocument doc(128);
-    doc["status"]    = "false";
-    doc["errorCode"] = "invalid_mac";
-    String out;
-    serializeJson(doc, out);
-    server.send(400, "application/json", out);
+    server.send(400, "application/json", "{\"status\":\"false\",\"errorCode\":\"invalid_mac\"}");
     return;
   }
 
@@ -620,14 +593,15 @@ void handleGenerateVoucher() {
 
   blinkLed(2);
 
-  DynamicJsonDocument doc(128);
-  doc["status"]  = "true";
-  doc["voucher"] = code;
-  String out;
-  serializeJson(doc, out);
-  server.send(200, "application/json", out);
+  String json = "{\"status\":\"true\",\"voucher\":\"" + jsonEscape(code) + "\"}";
+  server.send(200, "application/json", json);
 }
 
+/**
+ * POST /cancelTopUp — cancel pending coin session.
+ *
+ * Body (form-encoded): voucher={code}&mac={MAC}
+ */
 void handleCancelTopUp() {
   String mac = server.arg("mac");
   mac.toUpperCase();
@@ -650,13 +624,18 @@ void handleNotFound() {
   server.send(404, "text/plain", "not_found");
 }
 
+/**
+ * Normal mode init — connect to saved WiFi as STA, start HTTP server.
+ */
 void normalModeInit() {
   setupMode = false;
   Serial.println("=== NORMAL MODE ===");
   Serial.printf("Connecting to '%s'...\n", savedSsid.c_str());
 
   WiFi.mode(WIFI_STA);
-  WiFi.hostname("vendo-" + WiFi.macAddress().substring(12, 17).replace(":", ""));
+  // Set hostname to "vendo-XXXX" (last 2 MAC bytes) for DHCP discovery
+  String hostname = "vendo-" + WiFi.macAddress().substring(12, 17).replace(":", "");
+  WiFi.hostname(hostname.c_str());
   WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
 
   uint8_t attempts = 0;
@@ -672,7 +651,7 @@ void normalModeInit() {
     Serial.println(WiFi.localIP());
     blinkLed(3);
   } else {
-    Serial.println(" FAILED — will retry in loop()");
+    Serial.println(" FAILED - will retry in loop()");
   }
 
   // HTTP routes
@@ -691,7 +670,7 @@ void normalModeInit() {
 }
 
 /* ============================================================
- * 11. setup()
+ * 12. setup()
  * ============================================================ */
 
 void setup() {
@@ -702,7 +681,7 @@ void setup() {
 
   // LED
   pinMode(PIN_LED, OUTPUT);
-  digitalWrite(PIN_LED, HIGH);
+  digitalWrite(PIN_LED, HIGH);  // OFF (active-LOW)
 
   // Setup button (active-LOW, internal pullup)
   pinMode(PIN_SETUP_BTN, INPUT_PULLUP);
@@ -714,7 +693,7 @@ void setup() {
   // SPIFFS
   Serial.print("Mounting SPIFFS... ");
   if (!SPIFFS.begin()) {
-    Serial.println("FAILED — formatting...");
+    Serial.println("FAILED - formatting...");
     SPIFFS.format();
     SPIFFS.begin();
   }
@@ -741,12 +720,12 @@ void setup() {
     setupModeInit();  // This function never returns
   }
 
-  // Normal mode — connect to saved WiFi
+  // Normal mode - connect to saved WiFi
   normalModeInit();
 }
 
 /* ============================================================
- * 12. loop()
+ * 13. loop()
  * ============================================================ */
 
 void loop() {
@@ -757,7 +736,7 @@ void loop() {
     static uint32_t lastReconnectMs = 0;
     if (millis() - lastReconnectMs > 5000) {
       lastReconnectMs = millis();
-      Serial.print("WiFi lost — reconnecting... ");
+      Serial.print("WiFi lost - reconnecting... ");
       WiFi.reconnect();
       delay(5000);
       if (WiFi.status() == WL_CONNECTED) {
