@@ -86,6 +86,22 @@ if ($found === null) {
     aircoins_json(['connected' => false], 200);
 }
 
+// Mark the voucher as used in voucher_log (if it exists and hasn't been marked yet).
+try {
+    $userName = (string) ($found['user'] ?? '');
+    if ($userName !== '') {
+        $markStmt = $pdo->prepare('UPDATE voucher_log SET used_at = :now, mac = :mac, ip = :ip WHERE code = :code AND used_at IS NULL');
+        $markStmt->execute([
+            ':now'  => time(),
+            ':mac'  => $mac,
+            ':ip'   => (string) ($found['address'] ?? ''),
+            ':code' => $userName,
+        ]);
+    }
+} catch (Throwable $me) {
+    // Non-fatal: session lookup still works even if voucher logging fails.
+}
+
 // time_left is not exposed by the unified session shape; the portal falls back
 // to its own snapshot (the `left` query param) when this is null.
 $timeLeft = null;

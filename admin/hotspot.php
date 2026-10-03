@@ -173,6 +173,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             try {
                 $client->addHotspotUser($code, $code, $profile, $comment, $uptimeLimit);
                 $created[] = $code;
+                // Track voucher in voucher_log (unused until first login).
+                try {
+                    $vIns = $pdo->prepare('INSERT INTO voucher_log (code, router_id, used_at, expires_at) VALUES (:code, :rid, NULL, :exp)');
+                    $expTs = $uptimeMin > 0 ? time() + ($uptimeMin * 60) : null;
+                    $vIns->execute([':code' => $code, ':rid' => $routerId, ':exp' => $expTs]);
+                } catch (Throwable $ve) {
+                    // Non-fatal: voucher was created on router even if logging fails.
+                }
             } catch (Throwable $e) {
                 $failed[] = $code . ' (' . $e->getMessage() . ')';
                 // Abort early if the very first fails (likely profile/permission).
@@ -299,6 +307,17 @@ $voucherResult = null;
 if (!empty($_SESSION['aircoins_vouchers']) && is_array($_SESSION['aircoins_vouchers'])) {
     $voucherResult = $_SESSION['aircoins_vouchers'];
     unset($_SESSION['aircoins_vouchers']);
+}
+
+// Build voucher status lookup from voucher_log.
+$voucherStatus = [];
+try {
+    $vRows = $pdo->query('SELECT code, mac, ip, used_at, expires_at FROM voucher_log ORDER BY id DESC')->fetchAll();
+    foreach ($vRows as $vr) {
+        $voucherStatus[(string) ($vr['code'] ?? '')] = $vr;
+    }
+} catch (Throwable $e) {
+    // Non-fatal.
 }
 
 aircoins_header('Hotspot', 'hotspot');
@@ -504,7 +523,7 @@ aircoins_header('Hotspot', 'hotspot');
         <?php else: ?>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>.id</th><th>Name</th><th>Profile</th><th>Session Limit</th><th>Comment</th><th>State</th><th class="actions">Actions</th></tr></thead>
+              <thead><tr><th>.id</th><th>Name</th><th>Profile</th><th>Session Limit</th><th>Comment</th><th>Voucher</th><th>State</th><th class="actions">Actions</th></tr></thead>
               <tbody>
               <?php foreach ($users as $u): ?>
                 <tr>
@@ -513,6 +532,19 @@ aircoins_header('Hotspot', 'hotspot');
                   <td><?php echo e((string) ($u['profile'] ?? '')); ?></td>
                   <td class="mono"><?php echo e((string) ($u['limit-uptime'] ?? '')); ?></td>
                   <td class="hint"><?php echo e((string) ($u['comment'] ?? '')); ?></td>
+                  <td>
+                    <?php
+                    $uName = (string) ($u['name'] ?? '');
+                    $vInfo = $voucherStatus[$uName] ?? null;
+                    if ($vInfo !== null && !empty($vInfo['used_at'])):
+                    ?>
+                      <span class="badge badge--idle" title="Used <?php echo e(date('M j H:i', (int) $vInfo['used_at'])); ?><?php echo $vInfo['mac'] ? ' · ' . e((string) $vInfo['mac']) : ''; ?>">USED</span>
+                    <?php elseif ($vInfo !== null): ?>
+                      <span class="badge badge--online">READY</span>
+                    <?php else: ?>
+                      <span class="hint">—</span>
+                    <?php endif; ?>
+                  </td>
                   <td>
                     <?php if (!empty($u['disabled'])): ?>
                       <span class="badge badge--off">DISABLED</span>
