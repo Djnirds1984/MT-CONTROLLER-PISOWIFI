@@ -14,6 +14,13 @@
 - [hotspot-external-portal.rsc](file://deploy/mikrotik/hotspot-external-portal.rsc)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Enhanced external mode login functionality with dynamic form creation fallback
+- Added robust validation checks for voucher-based authentication reliability
+- Improved SBC lighttpd deployment compatibility through improved form construction
+- Updated architecture diagrams to reflect enhanced error handling and fallback mechanisms
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -32,10 +39,11 @@ This document explains the login interface and voucher entry system for the capt
 - MD5 hashing used for CHAP password computation
 - Automatic MAC-address-as-voucher generation
 - Form validation, error handling, and integration with the underlying MikroTik hotspot and vendor systems
+- **Enhanced external mode operation with dynamic form creation and improved reliability**
 
 The portal supports two deployment modes:
 - Router-native mode: served by MikroTik; uses CHAP challenge-response
-- External mode: served by an SBC behind lighttpd; uses HTTP-PAP to the router’s login endpoint
+- External mode: served by an SBC behind lighttpd; uses HTTP-PAP to the router's login endpoint
 
 ## Project Structure
 The login UI is implemented as HTML templates with client-side JavaScript. Supporting assets include configuration, a dual-mode bridge, and an MD5 implementation. Server-side components provide secure admin authentication and encrypted storage for router credentials.
@@ -54,7 +62,7 @@ MT --> Vendor["Vendo / Top-up Service"]
 - [varbridge.js:41-103](file://hotspot/js/varbridge.js#L41-L103)
 
 **Section sources**
-- [login.html:1-775](file://hotspot/login.html#L1-L775)
+- [login.html:1-790](file://hotspot/login.html#L1-L790)
 - [core.js:1-959](file://hotspot/assets/js/core.js#L1-L959)
 - [config.js:1-63](file://hotspot/assets/js/config.js#L1-L63)
 - [varbridge.js:1-239](file://hotspot/js/varbridge.js#L1-L239)
@@ -78,6 +86,8 @@ Key responsibilities:
 - varbridge.js enables the same HTML to run on both router and SBC
 - hotspot-external-portal.rsc documents the external PAP flow and router configuration
 
+**Updated** Enhanced external mode support with dynamic form creation fallback when sendin form element is missing from DOM
+
 **Section sources**
 - [login.html:349-428](file://hotspot/login.html#L349-L428)
 - [login.html:483-494](file://hotspot/login.html#L483-L494)
@@ -95,10 +105,10 @@ Key responsibilities:
 The portal supports two authentication paths:
 
 - Router-native mode (CHAP):
-  - The browser submits a hidden form to the router’s login endpoint
+  - The browser submits a hidden form to the router's login endpoint
   - Password is computed as MD5(chap-id + "" + chap-challenge) or MD5(chap-id + voucher + chap-challenge) depending on loginOption
 - External mode (HTTP-PAP):
-  - The SBC serves the portal; the login form posts plaintext voucher to the router’s login URL
+  - The SBC serves the portal; the login form posts plaintext voucher to the router's login URL
   - Router responds with redirect to the SBC status page
 
 ```mermaid
@@ -114,7 +124,13 @@ L->>R : POST username/password (CHAP)
 R-->>B : Redirect to status or error
 Note over B,S : External (HTTP-PAP)
 B->>L : Click SUBMIT
+L->>L : Check if sendin form exists
+alt Form exists
 L->>R : POST voucher (PAP) to router login URL
+else Form missing (fallback)
+L->>L : Create dynamic sendin form
+L->>R : POST voucher (PAP) to router login URL
+end
 R-->>S : Redirect to SBC status page
 S-->>B : Show session status
 ```
@@ -133,13 +149,19 @@ S-->>B : Show session status
 - The voucher input field and submit button are defined in the main content area
 - On submit, doLogin() runs:
   - In external mode, it sets username/password to the voucher and navigates to the router login URL
+  - **Enhanced**: Dynamic form creation fallback when sendin form element is missing from DOM
   - In router-native mode, it computes CHAP password using hexMD5() and submits the hidden form
 - Temporary validity is stored locally and merged with persisted validity when available
+
+**Updated** Added robust fallback mechanism for external mode form creation
 
 ```mermaid
 flowchart TD
 Start(["User clicks SUBMIT"]) --> Mode{"External mode?"}
-Mode --> |Yes| Pap["Set username/password=voucher<br/>Navigate to router login URL"]
+Mode --> |Yes| CheckForm{"sendin form exists?"}
+CheckForm --> |No| CreateForm["Create dynamic sendin form<br/>with required fields"]
+CheckForm --> |Yes| Pap["Set username/password=voucher<br/>Navigate to router login URL"]
+CreateForm --> Pap
 Mode --> |No| Chap["Compute CHAP password via hexMD5()<br/>Submit hidden form"]
 Chap --> Store["Store activeVoucher and validity"]
 Pap --> End(["Router authenticates via PAP"])
@@ -153,6 +175,48 @@ Store --> End
 **Section sources**
 - [login.html:349-428](file://hotspot/login.html#L349-L428)
 - [login.html:483-494](file://hotspot/login.html#L483-L494)
+
+### Enhanced External Mode Form Creation
+When operating in external mode (SBC lighttpd deployment), the system now includes enhanced form creation logic:
+
+- **Dynamic Form Detection**: Checks if the sendin form exists in the DOM before attempting to use it
+- **Fallback Form Construction**: If the form is missing (due to varbridge stripping conditional elements), creates a new form element programmatically
+- **Field Population**: Automatically populates all required fields including username, password, dst, and popup parameters
+- **Action URL Handling**: Uses PORTAL.params.login for the router login URL or falls back gracefully
+
+```mermaid
+sequenceDiagram
+participant B as "Browser"
+participant L as "Portal Script"
+participant F as "Form Element"
+participant R as "Router"
+B->>L : Submit voucher
+L->>L : Check window.PORTAL.external
+alt External mode
+L->>L : Check document.sendin exists
+alt Form exists
+L->>F : Use existing sendin form
+else Form missing
+L->>F : Create new form element
+L->>F : Add required fields (username, password, dst, popup)
+L->>F : Set action to PORTAL.params.login
+end
+L->>F : Set username/password = voucher
+L->>R : Submit form to router login URL
+else Router-native mode
+L->>F : Compute CHAP password
+L->>R : Submit CHAP form
+end
+R-->>B : Redirect to status or error
+```
+
+**Diagram sources**
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
+- [varbridge.js:126-140](file://hotspot/js/varbridge.js#L126-L140)
+
+**Section sources**
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
+- [varbridge.js:126-140](file://hotspot/js/varbridge.js#L126-L140)
 
 ### Member Login Modal and CHAP Response
 - The member login modal contains username and password fields
@@ -184,14 +248,14 @@ R-->>B : Redirect to status or error
   - Password = MD5(chap-id + "" + chap-challenge) when loginOption == 0
   - Password = MD5(chap-id + voucher + chap-challenge) when loginOption == 1
 - External mode uses HTTP-PAP:
-  - The SBC portal posts the voucher as plaintext to the router’s login URL
+  - The SBC portal posts the voucher as plaintext to the router's login URL
   - Router redirects to the SBC status page upon success
 
 ```mermaid
 flowchart TD
 A["Portal receives request"] --> B{"Router serves or SBC serves?"}
 B --> |Router| C["CHAP: compute MD5(chap-id + '' + chap-challenge)<br/>or MD5(chap-id + voucher + chap-challenge)"]
-B --> |SBC| D["HTTP-PAP: POST voucher as username/password"]
+B --> |SBC| D["HTTP-PAP: POST voucher as username/password<br/>with dynamic form fallback"]
 C --> E["Router authenticates and redirects"]
 D --> F["Router authenticates and redirects to SBC status"]
 ```
@@ -232,26 +296,34 @@ R-->>U : Redirect to status or error
 
 ### HTTP-PAP Flow for External Mode
 - When PORTAL.external is true, doLogin() sets username/password to the voucher and submits directly to the router login URL
+- **Enhanced**: Includes dynamic form creation fallback when the sendin form element is missing from the DOM
 - The router authenticates via PAP and redirects to the SBC status page
 
 ```mermaid
 sequenceDiagram
 participant B as "Browser"
 participant L as "Portal (external)"
+participant F as "Form Element"
 participant R as "Router"
 participant S as "SBC Status"
 B->>L : Click SUBMIT
+L->>L : Check if sendin form exists
+alt Form exists
+L->>F : Use existing form
+else Form missing
+L->>F : Create dynamic form with required fields
+end
 L->>R : POST voucher (PAP)
 R-->>S : Redirect to status page
 S-->>B : Display session info
 ```
 
 **Diagram sources**
-- [login.html:365-379](file://hotspot/login.html#L365-L379)
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
 - [hotspot-external-portal.rsc:122-144](file://deploy/mikrotik/hotspot-external-portal.rsc#L122-L144)
 
 **Section sources**
-- [login.html:365-379](file://hotspot/login.html#L365-L379)
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
 - [hotspot-external-portal.rsc:122-144](file://deploy/mikrotik/hotspot-external-portal.rsc#L122-L144)
 
 ### MD5 Hashing Implementation
@@ -296,28 +368,38 @@ Skip --> End
 - [core.js:139-143](file://hotspot/assets/js/core.js#L139-L143)
 - [config.js:60-61](file://hotspot/assets/js/config.js#L60-L61)
 
-### Form Validation and Error Handling
+### Enhanced Form Validation and Error Handling
 - Frontend validation:
   - Empty voucher handling and toast notifications
   - Error messages from vendor responses mapped via errorCodeMap
+  - **Enhanced**: Robust form existence checks and fallback creation for external mode
 - Backend/admin security:
   - Argon2id/bcrypt password hashing and verification for admin accounts
   - Rate limiting per IP and audit logging
   - Encrypted router credential storage using libsodium secretbox
 
+**Updated** Added enhanced form validation with dynamic form creation fallback for external mode reliability
+
 ```mermaid
 flowchart TD
 A["User action"] --> B{"Validation ok?"}
 B --> |No| E["Show toast with errorCodeMap message"]
-B --> |Yes| C["Call vendor API or submit login"]
-C --> D{"Success?"}
-D --> |No| E
-D --> |Yes| F["Proceed to next step (auto-login, show rates, etc.)"]
+B --> |Yes| C{"External mode?"}
+C --> |Yes| D{"sendin form exists?"}
+D --> |No| F["Create dynamic form"]
+D --> |Yes| G["Use existing form"]
+F --> H["Call vendor API or submit login"]
+G --> H
+C --> |No| H
+H --> I{"Success?"}
+I --> |No| E
+I --> |Yes| J["Proceed to next step (auto-login, show rates, etc.)"]
 ```
 
 **Diagram sources**
 - [core.js:1-14](file://hotspot/assets/js/core.js#L1-L14)
 - [core.js:62-73](file://hotspot/assets/js/core.js#L62-L73)
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
 - [auth.php:18-57](file://includes/auth.php#L18-L57)
 - [auth.php:96-138](file://includes/auth.php#L96-L138)
 - [crypto.php:84-137](file://includes/crypto.php#L84-L137)
@@ -325,6 +407,7 @@ D --> |Yes| F["Proceed to next step (auto-login, show rates, etc.)"]
 **Section sources**
 - [core.js:1-14](file://hotspot/assets/js/core.js#L1-L14)
 - [core.js:62-73](file://hotspot/assets/js/core.js#L62-L73)
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
 - [auth.php:18-57](file://includes/auth.php#L18-L57)
 - [auth.php:96-138](file://includes/auth.php#L96-L138)
 - [crypto.php:84-137](file://includes/crypto.php#L84-L137)
@@ -332,7 +415,7 @@ D --> |Yes| F["Proceed to next step (auto-login, show rates, etc.)"]
 ### Integration with Underlying Systems
 - Router integration:
   - Router-native CHAP via hidden form submission
-  - External PAP via direct navigation to router login URL
+  - External PAP via direct navigation to router login URL with enhanced form fallback
 - Vendor/top-up integration:
   - AJAX calls to vendor endpoints for top-up, coin check, and voucher conversion
   - Multi-vendor selection and feature toggles via config.js
@@ -397,6 +480,7 @@ K["crypto.php"] --> E["Encrypted Credentials"]
 - Use local storage for temporary validity to reduce server round-trips
 - Prefer router-native CHAP when possible to avoid extra redirects in external mode
 - Keep vendor API retry logic bounded to prevent excessive network traffic
+- **Enhanced**: Dynamic form creation is lightweight and only occurs when needed in external mode
 
 [No sources needed since this section provides general guidance]
 
@@ -414,14 +498,23 @@ Common issues and resolutions:
 - CHAP failures:
   - Verify chap-id and chap-challenge are present in router-native mode
   - Confirm hexMD5() is loaded and functioning
+- **Enhanced**: External mode form issues:
+  - The system now automatically creates a fallback form if the sendin form is missing
+  - Check that PORTAL.external is properly detected by varbridge.js
+  - Verify that PORTAL.params.login contains the correct router login URL
+
+**Updated** Added troubleshooting guidance for enhanced external mode form creation
 
 **Section sources**
 - [core.js:1-14](file://hotspot/assets/js/core.js#L1-L14)
 - [core.js:62-73](file://hotspot/assets/js/core.js#L62-L73)
 - [hotspot-external-portal.rsc:147-171](file://deploy/mikrotik/hotspot-external-portal.rsc#L147-L171)
 - [login.html:349-428](file://hotspot/login.html#L349-L428)
+- [login.html:365-394](file://hotspot/login.html#L365-L394)
 
 ## Conclusion
-The portal provides a flexible login interface supporting both voucher-based and member-based authentication. It seamlessly operates in router-native CHAP mode and external HTTP-PAP mode, with robust client-side handling for voucher entry, automatic MAC-as-voucher generation, and vendor integrations. Security is reinforced through modern password hashing for admin accounts and encrypted storage for router credentials. Proper configuration of the router and SBC ensures reliable operation across both deployment modes.
+The portal provides a flexible login interface supporting both voucher-based and member-based authentication. It seamlessly operates in router-native CHAP mode and external HTTP-PAP mode, with robust client-side handling for voucher entry, automatic MAC-as-voucher generation, and vendor integrations. 
+
+**Enhanced** The latest improvements include dynamic form creation fallback for external mode operation, ensuring reliable authentication even when the sendin form element is missing from the DOM due to varbridge processing. Security is reinforced through modern password hashing for admin accounts and encrypted storage for router credentials. Proper configuration of the router and SBC ensures reliable operation across both deployment modes.
 
 [No sources needed since this section summarizes without analyzing specific files]

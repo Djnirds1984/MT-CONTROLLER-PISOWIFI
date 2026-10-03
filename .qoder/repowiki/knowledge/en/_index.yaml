@@ -3,7 +3,7 @@ schema_version: 1
 locale: en-US
 branch: main
 nodes_managed: true
-exported_at: "2026-10-03T07:44:04Z"
+exported_at: "2026-10-03T08:14:02Z"
 modules:
     "":
         dir_name: AIRCOINS NETFI MikroTik Hotspot Controller
@@ -41,8 +41,8 @@ modules:
         related_to:
             - path: router_stubs
     hotspot_portal:
-        dir_name: MikroTik Hotspot Captive Portal
-        title: MikroTik Hotspot Captive Portal
+        dir_name: MikroTik Hotspot Captive Portal (Dual-Mode)
+        title: MikroTik Hotspot Captive Portal (Dual-Mode)
         scope:
             - hotspot/
             - api/
