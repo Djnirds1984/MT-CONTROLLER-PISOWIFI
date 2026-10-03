@@ -375,7 +375,8 @@
 			   In ROUTER-NATIVE mode the CHAP tokens are real values, so
 			   we use the hidden sendin form with the CHAP hash. */
 			var vc = document.getElementById('voucherInput') ? document.getElementById('voucherInput').value : '';
-			if (vc === '') {
+			var isMacLogin = (vc === '');
+			if (isMacLogin) {
 				vc = replaceAll(mac, ":");
 				if (vc === '') { return false; }
 			}
@@ -408,11 +409,13 @@
 			if (window.PORTAL && window.PORTAL.external) {
 				/* External / SBC mode: CHAP tokens are literal garbage.
 				   Submit plaintext credentials through the member login
-				   form (its action was patched by varbridge.js). */
+				   form (its action was patched by varbridge.js).
+				   - Voucher login: password is EMPTY (voucher created with no password)
+				   - Device MAC login: password is the MAC (device user has MAC as password) */
 				var loginForm = document.forms['login'];
 				if (loginForm) {
 					loginForm.username.value = vc;
-					loginForm.password.value = vc;
+					loginForm.password.value = isMacLogin ? vc : '';
 					loginForm.submit();
 				}
 				return false;

@@ -162,7 +162,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         for ($i = 0; $i < $count; $i++) {
             $code = aircoins_voucher_code($prefix, $len);
             try {
-                $client->addHotspotUser($code, $code, $profile, $comment, $uptimeLimit);
+                // Voucher with EMPTY password — the portal sends the code as
+                // plaintext username only (no password field on the voucher input).
+                $client->addHotspotUser($code, '', $profile, $comment, $uptimeLimit);
                 $created[] = $code;
                 // Track voucher in voucher_log (unused until first login).
                 try {
