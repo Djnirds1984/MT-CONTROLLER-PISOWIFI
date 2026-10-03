@@ -33,7 +33,7 @@ var voucherToConvert = "";
 function fetchVendoDevices(){
 	$.ajax({
 		type: "GET",
-		url: "/api/vendo.php?_=" + new Date().getTime(),
+		url: (typeof sbcApiUrl !== 'undefined' && sbcApiUrl ? sbcApiUrl : '') + "/api/vendo.php?_=" + new Date().getTime(),
 		dataType: "json",
 		success: function(data){
 			var devices = data.devices || [];

@@ -3,6 +3,12 @@ var isMultiVendo = true;
 // 0 = manual dropdown selection , 1 = auto select vendo base on hotspot address, 2 = interface name
 var multiVendoOption = 0;
 
+// SBC API base URL — used by portal JS to reach PHP endpoints on the SBC.
+// In router-native mode the portal is served by MikroTik, so /api/ doesn't exist
+// on the router. Set this to your SBC IP (http://10.0.0.252) so AJAX calls
+// reach the SBC directly. Leave empty for same-origin (external/SBC mode).
+var sbcApiUrl = "http://10.0.0.252";
+
 //list here all node mcu address for multi vendo setup (static fallback — dynamically loaded from /api/vendo.php)
 var multiVendoAddresses = [];
 
