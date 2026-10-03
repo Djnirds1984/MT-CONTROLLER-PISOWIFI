@@ -262,6 +262,85 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
+    // ---- Add time to device session ----------------------------------------
+    if ($action === 'add_time') {
+        $id      = (int) ($_POST['id'] ?? 0);
+        $mac     = (string) ($_POST['mac'] ?? '');
+        $days    = max(0, (int) ($_POST['add_days'] ?? 0));
+        $hours   = max(0, (int) ($_POST['add_hours'] ?? 0));
+        $minutes = max(0, (int) ($_POST['add_minutes'] ?? 0));
+
+        if ($id <= 0 || $mac === '') {
+            aircoins_flash('error', 'Missing device.');
+            header($back);
+            exit;
+        }
+        $addSeconds = ($days * 86400) + ($hours * 3600) + ($minutes * 60);
+        if ($addSeconds <= 0) {
+            aircoins_flash('error', 'Enter a time amount to add.');
+            header($back);
+            exit;
+        }
+
+        // Find the device's router.
+        $stmt = $pdo->prepare('SELECT * FROM devices WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $device = $stmt->fetch();
+        $devRouterId = (int) ($device['router_id'] ?? 0);
+        if ($devRouterId <= 0) {
+            $devRouterId = $routerId;
+        }
+        $devRouter = $devRouterId > 0 ? aircoins_get_router($pdo, $devRouterId) : null;
+        if (!$devRouter) {
+            aircoins_flash('error', 'No router assigned to this device.');
+            header($back);
+            exit;
+        }
+
+        try {
+            $client  = aircoins_router_client($devRouter);
+            $macUser = str_replace(':', '', strtoupper($mac));
+
+            // Find the hotspot user on the router.
+            $users = $client->hotspotUsers();
+            $targetUser = null;
+            foreach ($users as $eu) {
+                if ((string) ($eu['name'] ?? '') === $macUser) {
+                    $targetUser = $eu;
+                    break;
+                }
+            }
+
+            if ($targetUser === null) {
+                // No hotspot user yet — create one with the add time as limit.
+                $newLimit = aircoins_seconds_to_time($addSeconds);
+                $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
+            } else {
+                // User exists — calculate new limit = current uptime + added time.
+                $currentLimitSec = aircoins_parse_time_to_seconds((string) ($targetUser['limit-uptime'] ?? ''));
+
+                // If online, base the new limit on current uptime + added time.
+                // If offline, just add to the existing limit.
+                $newLimitSec = $currentLimitSec + $addSeconds;
+                $newLimit = aircoins_seconds_to_time($newLimitSec);
+
+                $client->updateHotspotUser((string) $targetUser['.id'], ['limit-uptime' => $newLimit]);
+            }
+
+            // Update DB session_time too.
+            $newLimitDisplay = aircoins_seconds_to_time($addSeconds);
+            $pdo->prepare('UPDATE devices SET session_time = :st, updated_at = :now WHERE id = :id')
+                ->execute([':st' => $newLimit, ':now' => time(), ':id' => $id]);
+
+            aircoins_audit($pdo, $adminId, 'device_add_time', 'device #' . $id . ' mac=' . $mac . ' added=' . $newLimit);
+            aircoins_flash('success', 'Added ' . $newLimit . ' to ' . $mac . '.');
+        } catch (Throwable $e) {
+            aircoins_flash('error', 'Add time failed: ' . $e->getMessage());
+        }
+        header($back);
+        exit;
+    }
+
     aircoins_flash('error', 'Unknown action.');
     header($back);
     exit;
@@ -286,7 +365,12 @@ if ($router) {
             $m = strtoupper((string) ($s['mac'] ?? ''));
             if ($m !== '') {
                 $activeMacs[$m] = true;
-                $activeByRouter[$m] = ['router_id' => (int) $router['id'], 'session_id' => (string) ($s['.id'] ?? ''), 'uptime' => (string) ($s['uptime'] ?? '')];
+                $activeByRouter[$m] = [
+                    'router_id'    => (int) $router['id'],
+                    'session_id'   => (string) ($s['.id'] ?? ''),
+                    'uptime'       => (string) ($s['uptime'] ?? ''),
+                    'limit-uptime' => (string) ($s['limit-uptime'] ?? ''),
+                ];
             }
         }
     } catch (Throwable $e) {
@@ -406,6 +490,7 @@ aircoins_header('Devices', 'devices');
               <th>Hostname</th>
               <th>User</th>
               <th>Session</th>
+              <th>Time Left</th>
               <th>Router</th>
               <th>Status</th>
               <th>Last seen</th>
@@ -424,6 +509,31 @@ aircoins_header('Devices', 'devices');
               <td><?php echo e((string) ($d['hostname'] ?? '—')); ?></td>
               <td><?php echo e((string) ($d['user'] ?? '—')); ?></td>
               <td class="mono"><?php echo e((string) ($d['session_time'] ?? '—')); ?></td>
+              <td class="mono">
+                <?php if ($isOnline && isset($activeByRouter[strtoupper($mac)])):
+                  $sessInfo = $activeByRouter[strtoupper($mac)];
+                  $limitSec = aircoins_parse_time_to_seconds($sessInfo['limit-uptime']);
+                  $uptimeSec = aircoins_parse_time_to_seconds($sessInfo['uptime']);
+                  $remainSec = $limitSec > 0 ? $limitSec - $uptimeSec : 0;
+                ?>
+                  <?php if ($limitSec > 0):
+                    $h = intdiv($remainSec, 3600);
+                    $m = intdiv($remainSec % 3600, 60);
+                    $s = $remainSec % 60;
+                  ?>
+                    <span class="countdown <?php echo $remainSec <= 0 ? 'countdown--expired' : ($remainSec < 300 ? 'countdown--warn' : ''); ?>"
+                          data-limit="<?php echo $limitSec; ?>"
+                          data-uptime="<?php echo $uptimeSec; ?>"
+                          data-load="<?php echo time(); ?>">
+                      <?php echo sprintf('%02d:%02d:%02d', $h, $m, $s); ?>
+                    </span>
+                  <?php else: ?>
+                    <span class="hint">unlimited</span>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <span class="hint">—</span>
+                <?php endif; ?>
+              </td>
               <td class="hint"><?php echo e((string) ($d['router_name'] ?? '—')); ?></td>
               <td>
                 <?php if ($isOnline): ?>
@@ -449,6 +559,9 @@ aircoins_header('Devices', 'devices');
                     data-hostname="<?php echo e((string) ($d['hostname'] ?? '')); ?>"
                     data-status="<?php echo e($dbStatus); ?>"
                     data-session="<?php echo e((string) ($d['session_time'] ?? '')); ?>">Edit</button>
+                  <button class="btn btn--ghost btn--sm" type="button" data-add-time
+                    data-id="<?php echo (int) $d['id']; ?>"
+                    data-mac="<?php echo e($mac); ?>">+Time</button>
                   <?php if ($isOnline && isset($activeByRouter[strtoupper($mac)])):
                     $info = $activeByRouter[strtoupper($mac)];
                   ?>
@@ -530,29 +643,134 @@ aircoins_header('Devices', 'devices');
   </div>
 </div>
 
+<!-- Add Time modal -->
+<div class="modal" id="addTimeModal" hidden>
+  <div class="modal__scrim" data-modal-close></div>
+  <div class="modal__panel">
+    <div class="modal__head">
+      <h3>Add session time</h3>
+      <button class="modal__x" type="button" data-modal-close>&times;</button>
+    </div>
+    <form method="post" action="devices.php">
+      <?php echo csrf_field(); ?>
+      <input type="hidden" name="action" value="add_time">
+      <input type="hidden" name="id" id="at-id">
+      <input type="hidden" name="mac" id="at-mac">
+      <div class="modal__body">
+        <div class="field">
+          <label>Device</label>
+          <input class="input input--mono" id="at-mac-display" type="text" readonly>
+        </div>
+        <div class="form-grid form-grid--3">
+          <div class="field">
+            <label for="at-days">Days</label>
+            <input class="input input--mono" id="at-days" name="add_days" type="number" min="0" max="365" value="0" step="1">
+          </div>
+          <div class="field">
+            <label for="at-hours">Hours</label>
+            <input class="input input--mono" id="at-hours" name="add_hours" type="number" min="0" max="23" value="0" step="1">
+          </div>
+          <div class="field">
+            <label for="at-mins">Minutes</label>
+            <input class="input input--mono" id="at-mins" name="add_minutes" type="number" min="0" max="59" value="0" step="1">
+          </div>
+        </div>
+        <p class="hint" style="margin-top:4px">Time will be added to the device's current session limit on the router.</p>
+      </div>
+      <div class="modal__foot">
+        <button class="btn btn--ghost" type="button" data-modal-close>Cancel</button>
+        <button class="btn btn--primary" type="submit">Add time</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 (function() {
-  var modal = document.getElementById('editModal');
-  if (!modal) return;
+  /* ---- Edit modal ---- */
+  var editModal = document.getElementById('editModal');
+  if (editModal) {
+    function openEditModal() { editModal.hidden = false; }
+    function closeEditModal() { editModal.hidden = true; }
 
-  function openModal() { modal.hidden = false; }
-  function closeModal() { modal.hidden = true; }
-
-  document.querySelectorAll('[data-edit-device]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.getElementById('edit-id').value = btn.dataset.id;
-      document.getElementById('edit-mac').value = btn.dataset.mac;
-      document.getElementById('edit-ip').value = btn.dataset.ip;
-      document.getElementById('edit-hostname').value = btn.dataset.hostname;
-      document.getElementById('edit-status').value = btn.dataset.status;
-      document.getElementById('edit-session').value = btn.dataset.session;
-      openModal();
+    document.querySelectorAll('[data-edit-device]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.getElementById('edit-id').value = btn.dataset.id;
+        document.getElementById('edit-mac').value = btn.dataset.mac;
+        document.getElementById('edit-ip').value = btn.dataset.ip;
+        document.getElementById('edit-hostname').value = btn.dataset.hostname;
+        document.getElementById('edit-status').value = btn.dataset.status;
+        document.getElementById('edit-session').value = btn.dataset.session;
+        openEditModal();
+      });
     });
-  });
 
-  modal.querySelectorAll('[data-modal-close]').forEach(function(el) {
-    el.addEventListener('click', closeModal);
-  });
+    editModal.querySelectorAll('[data-modal-close]').forEach(function(el) {
+      el.addEventListener('click', closeEditModal);
+    });
+  }
+
+  /* ---- Add Time modal ---- */
+  var atModal = document.getElementById('addTimeModal');
+  if (atModal) {
+    function openAtModal() { atModal.hidden = false; }
+    function closeAtModal() { atModal.hidden = true; }
+
+    document.querySelectorAll('[data-add-time]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.getElementById('at-id').value = btn.dataset.id;
+        document.getElementById('at-mac').value = btn.dataset.mac;
+        document.getElementById('at-mac-display').value = btn.dataset.mac;
+        // Reset fields
+        document.getElementById('at-days').value = 0;
+        document.getElementById('at-hours').value = 0;
+        document.getElementById('at-mins').value = 0;
+        openAtModal();
+      });
+    });
+
+    atModal.querySelectorAll('[data-modal-close]').forEach(function(el) {
+      el.addEventListener('click', closeAtModal);
+    });
+  }
+
+  /* ---- Realtime countdown ---- */
+  var countdowns = document.querySelectorAll('.countdown[data-limit]');
+  if (countdowns.length) {
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function tickCountdown(el) {
+      var limit   = parseInt(el.getAttribute('data-limit'), 10) || 0;
+      var uptime  = parseInt(el.getAttribute('data-uptime'), 10) || 0;
+      var loadTs  = parseInt(el.getAttribute('data-load'), 10) || 0;
+      if (limit <= 0) return;
+      var now = Math.floor(Date.now() / 1000);
+      var elapsed = loadTs > 0 ? (now - loadTs) : 0;
+      var currentUptime = uptime + elapsed;
+      var remain = limit - currentUptime;
+      if (remain <= 0) {
+        el.textContent = '00:00:00';
+        el.classList.remove('countdown--warn');
+        el.classList.add('countdown--expired');
+        return;
+      }
+      var h = Math.floor(remain / 3600);
+      var m = Math.floor((remain % 3600) / 60);
+      var s = remain % 60;
+      el.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
+      // Update warning state
+      if (remain < 300) {
+        el.classList.add('countdown--warn');
+      } else {
+        el.classList.remove('countdown--warn');
+      }
+    }
+    // Initial tick
+    countdowns.forEach(function(el) { tickCountdown(el); });
+    // Tick every second
+    setInterval(function() {
+      countdowns.forEach(function(el) { tickCountdown(el); });
+    }, 1000);
+  }
 })();
 </script>
 

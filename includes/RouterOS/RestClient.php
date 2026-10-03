@@ -127,6 +127,13 @@ class RestClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function updateHotspotUser(string $id, array $attrs): bool
+    {
+        $this->request('PATCH', '/ip/hotspot/user/' . $id, $attrs);
+        return true;
+    }
+
+    /** @inheritDoc */
     public function deleteHotspotUser(string $id): bool
     {
         // .id is appended RAW — the leading '*' must not be percent-encoded.
@@ -408,9 +415,10 @@ class RestClient implements RouterClient
             'user'      => (string) ($r['user'] ?? ''),
             'mac'       => (string) ($r['mac-address'] ?? $r['mac'] ?? ''),
             'address'   => (string) ($r['address'] ?? ''),
-            'uptime'    => (string) ($r['uptime'] ?? ''),
-            'bytes-in'  => (int) ($r['bytes-in'] ?? 0),
-            'bytes-out' => (int) ($r['bytes-out'] ?? 0),
+            'uptime'       => (string) ($r['uptime'] ?? ''),
+            'limit-uptime' => (string) ($r['limit-uptime'] ?? ''),
+            'bytes-in'     => (int) ($r['bytes-in'] ?? 0),
+            'bytes-out'    => (int) ($r['bytes-out'] ?? 0),
         ];
     }
 

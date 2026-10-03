@@ -505,6 +505,14 @@ class LegacyApiClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function updateHotspotUser(string $id, array $attrs): bool
+    {
+        $attrs['.id'] = $id;
+        $this->exec('/ip/hotspot/user/set', $attrs);
+        return true;
+    }
+
+    /** @inheritDoc */
     public function deleteHotspotUser(string $id): bool
     {
         $this->exec('/ip/hotspot/user/remove', ['.id' => $id]);
@@ -637,9 +645,10 @@ class LegacyApiClient implements RouterClient
             'user'      => (string) ($r['user'] ?? ''),
             'mac'       => (string) ($r['mac-address'] ?? $r['mac'] ?? ''),
             'address'   => (string) ($r['address'] ?? ''),
-            'uptime'    => (string) ($r['uptime'] ?? ''),
-            'bytes-in'  => (int) ($r['bytes-in'] ?? 0),
-            'bytes-out' => (int) ($r['bytes-out'] ?? 0),
+            'uptime'       => (string) ($r['uptime'] ?? ''),
+            'limit-uptime' => (string) ($r['limit-uptime'] ?? ''),
+            'bytes-in'     => (int) ($r['bytes-in'] ?? 0),
+            'bytes-out'    => (int) ($r['bytes-out'] ?? 0),
         ];
     }
 

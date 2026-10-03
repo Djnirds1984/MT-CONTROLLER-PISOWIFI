@@ -81,6 +81,53 @@ function fmt_uptime(int $seconds): string
 }
 
 /**
+ * Parse a MikroTik time string to total seconds.
+ *
+ * Supports formats like "30s", "10m", "1h", "1h30m", "1d", "1d2h30m10s".
+ *
+ * @param string $time MikroTik time string.
+ * @return int Total seconds (0 when unparseable).
+ */
+function aircoins_parse_time_to_seconds(string $time): int
+{
+    $time = trim($time);
+    if ($time === '' || $time === '0') {
+        return 0;
+    }
+    $total = 0;
+    if (preg_match('/^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/', $time, $m)) {
+        $total += (int) ($m[1] ?? 0) * 86400;
+        $total += (int) ($m[2] ?? 0) * 3600;
+        $total += (int) ($m[3] ?? 0) * 60;
+        $total += (int) ($m[4] ?? 0);
+    }
+    return $total;
+}
+
+/**
+ * Format seconds as a MikroTik-compatible time string.
+ *
+ * @param int $seconds Total seconds (>= 0).
+ * @return string e.g. "1d2h30m10s", or '' when <= 0.
+ */
+function aircoins_seconds_to_time(int $seconds): string
+{
+    if ($seconds <= 0) {
+        return '';
+    }
+    $d = intdiv($seconds, 86400);
+    $h = intdiv($seconds % 86400, 3600);
+    $m = intdiv($seconds % 3600, 60);
+    $s = $seconds % 60;
+    $parts = [];
+    if ($d > 0) { $parts[] = $d . 'd'; }
+    if ($h > 0) { $parts[] = $h . 'h'; }
+    if ($m > 0) { $parts[] = $m . 'm'; }
+    if ($s > 0) { $parts[] = $s . 's'; }
+    return implode('', $parts);
+}
+
+/**
  * Fetch a router row by id, or null when it does not exist.
  *
  * @param PDO $pdo Database connection.

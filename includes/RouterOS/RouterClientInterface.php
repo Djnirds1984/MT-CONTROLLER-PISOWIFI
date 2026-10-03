@@ -67,6 +67,15 @@ interface RouterClient
     public function addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array;
 
     /**
+     * Update a hotspot user's attributes by its router-assigned id.
+     *
+     * @param string $id    Router .id (e.g. "*5").
+     * @param array<string,string> $attrs Attributes to set (e.g. ['limit-uptime' => '2h']).
+     * @return bool True on success.
+     */
+    public function updateHotspotUser(string $id, array $attrs): bool;
+
+    /**
      * Remove a hotspot user by its router-assigned id (e.g. "*5").
      *
      * @param string $id Router .id.
