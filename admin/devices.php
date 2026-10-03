@@ -50,12 +50,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $sessions   = $client->activeSessions();
             $now        = time();
             $upserted   = 0;
+            $seenMacs   = [];
 
+            // Step 1: Sync from active hotspot sessions (online devices).
             foreach ($sessions as $s) {
                 $mac = strtoupper(trim((string) ($s['mac'] ?? '')));
                 if ($mac === '') {
                     continue;
                 }
+                $seenMacs[$mac] = true;
                 $ip    = (string) ($s['address'] ?? '');
                 $user  = (string) ($s['user'] ?? '');
                 $upt   = (string) ($s['uptime'] ?? '');
@@ -72,6 +75,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $ins->execute([':mac' => $mac, ':ip' => $ip, ':user' => $user, ':rid' => $routerId, ':st' => $upt, ':now' => $now, ':now2' => $now, ':now3' => $now, ':now4' => $now]);
                 }
                 $upserted++;
+            }
+
+            // Step 2: Sync from DHCP leases (includes devices without active sessions).
+            try {
+                $leases = $client->dhcpLeases();
+                foreach ($leases as $l) {
+                    $mac = strtoupper(trim((string) ($l['mac-address'] ?? '')));
+                    if ($mac === '') {
+                        continue;
+                    }
+                    $ip       = (string) ($l['address'] ?? '');
+                    $hostname = (string) ($l['host-name'] ?? '');
+
+                    $stmt = $pdo->prepare('SELECT id, hostname FROM devices WHERE mac_address = :mac LIMIT 1');
+                    $stmt->execute([':mac' => $mac]);
+                    $existing = $stmt->fetch();
+
+                    if ($existing) {
+                        // Update IP always; hostname only if currently empty.
+                        $sql = 'UPDATE devices SET ip_address = :ip, router_id = :rid, last_seen = :now, updated_at = :now2';
+                        $params = [':ip' => $ip, ':rid' => $routerId, ':now' => $now, ':now2' => $now, ':id' => (int) $existing['id']];
+                        if ((string) ($existing['hostname'] ?? '') === '' && $hostname !== '') {
+                            $sql .= ', hostname = :host';
+                            $params[':host'] = $hostname;
+                        }
+                        $sql .= ' WHERE id = :id';
+                        $upd = $pdo->prepare($sql);
+                        $upd->execute($params);
+                    } else {
+                        $ins = $pdo->prepare('INSERT INTO devices (mac_address, ip_address, hostname, router_id, status, first_seen, last_seen, created_at, updated_at) VALUES (:mac, :ip, :host, :rid, \'active\', :now, :now2, :now3, :now4)');
+                        $ins->execute([':mac' => $mac, ':ip' => $ip, ':host' => $hostname, ':rid' => $routerId, ':now' => $now, ':now2' => $now, ':now3' => $now, ':now4' => $now]);
+                    }
+                    if (!isset($seenMacs[$mac])) {
+                        $upserted++;
+                    }
+                }
+            } catch (Throwable $le) {
+                // DHCP lease fetch is best-effort; active session sync already succeeded.
             }
 
             aircoins_audit($pdo, $adminId, 'devices_sync', 'router #' . $routerId . ' synced ' . $upserted . ' device(s)');

@@ -186,6 +186,25 @@ class RestClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function dhcpLeases(): array
+    {
+        $rows = $this->get('/ip/dhcp-server/lease');
+        $out  = [];
+        foreach (self::asList($rows) as $r) {
+            $out[] = [
+                'mac-address'  => (string) ($r['mac-address'] ?? ''),
+                'address'      => (string) ($r['address'] ?? ''),
+                'host-name'    => (string) ($r['host-name'] ?? ''),
+                'server'       => (string) ($r['server'] ?? ''),
+                'status'       => (string) ($r['status'] ?? ''),
+                'expires-after'=> (string) ($r['expires-after'] ?? ''),
+                'last-seen'    => (string) ($r['last-seen'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
     public function kickSession(string $id): bool
     {
         $this->delete('/ip/hotspot/active/' . $id);

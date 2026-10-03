@@ -105,6 +105,12 @@ interface RouterClient
     public function activeSessions(): array;
 
     /**
+     * @return array<int,array<string,mixed>> DHCP server leases.
+     *   Each entry: 'mac-address', 'address', 'host-name', 'server', 'status', 'expires-after', 'last-seen'.
+     */
+    public function dhcpLeases(): array;
+
+    /**
      * Disconnect an active session by its router-assigned id.
      *
      * @param string $id Router .id of the active entry.

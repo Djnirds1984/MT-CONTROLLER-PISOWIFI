@@ -564,6 +564,25 @@ class LegacyApiClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function dhcpLeases(): array
+    {
+        $recs = $this->cmd('/ip/dhcp-server/lease/print');
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                'mac-address'  => (string) ($r['mac-address'] ?? ''),
+                'address'      => (string) ($r['address'] ?? ''),
+                'host-name'    => (string) ($r['host-name'] ?? ''),
+                'server'       => (string) ($r['server'] ?? ''),
+                'status'       => (string) ($r['status'] ?? ''),
+                'expires-after'=> (string) ($r['expires-after'] ?? ''),
+                'last-seen'    => (string) ($r['last-seen'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
     public function kickSession(string $id): bool
     {
         $this->exec('/ip/hotspot/active/remove', ['.id' => $id]);
