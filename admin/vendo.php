@@ -446,7 +446,7 @@ aircoins_header('Vendo Setup', 'vendo');
       <button class="modal__x" onclick="closeEditModal()">&times;</button>
     </div>
     <div class="modal__body">
-      <form id="editForm" onsubmit="return saveSettings(event)">
+      <form id="editForm">
         <?php echo csrf_field(); ?>
         <input type="hidden" name="action" value="save_settings">
         <input type="hidden" name="vendo_id" id="editVendoId" value="">
@@ -479,7 +479,7 @@ aircoins_header('Vendo Setup', 'vendo');
     </div>
     <div class="modal__foot">
       <button class="btn btn--ghost" onclick="closeEditModal()">Cancel</button>
-      <button class="btn btn--primary" onclick="document.getElementById('editForm').requestSubmit()">Save Configuration</button>
+      <button class="btn btn--primary" id="saveBtn" onclick="saveSettings()">Save Configuration</button>
     </div>
   </div>
 </div>
@@ -575,8 +575,7 @@ function closeEditModal() {
     document.body.style.overflow = '';
 }
 
-function saveSettings(evt) {
-    evt.preventDefault();
+function saveSettings() {
     var form = document.getElementById('editForm');
     var formData = new FormData(form);
 
@@ -593,7 +592,7 @@ function saveSettings(evt) {
     }
     formData.set('rates', JSON.stringify(rates));
 
-    var btn = form.querySelector('.modal__foot .btn--primary');
+    var btn = document.getElementById('saveBtn');
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
@@ -617,8 +616,6 @@ function saveSettings(evt) {
         btn.textContent = 'Save Configuration';
         alert('Save failed: ' + err);
     });
-
-    return false;
 }
 
 // Close modal on Escape
