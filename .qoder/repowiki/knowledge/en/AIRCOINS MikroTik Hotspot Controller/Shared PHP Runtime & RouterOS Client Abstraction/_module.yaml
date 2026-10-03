@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: shared_includes
-title: AIRCOINS Shared PHP Runtime & RouterOS Abstraction
+title: Shared PHP Runtime & RouterOS Client Abstraction
 scope:
     - includes/
 source_files: []

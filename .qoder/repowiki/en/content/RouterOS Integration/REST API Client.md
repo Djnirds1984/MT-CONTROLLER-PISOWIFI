@@ -9,13 +9,16 @@
 - [session.php](file://api/session.php)
 - [monitor.php](file://admin/api/monitor.php)
 - [hotspot.php](file://admin/hotspot.php)
+- [tools.php](file://admin/tools.php)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated attribute naming conventions for RouterOS API compatibility
-- Corrected hotspot profile endpoint paths for RouterOS v7 compatibility
-- Enhanced documentation for API version compatibility considerations
+- Enhanced REST client with comprehensive file upload capabilities via `uploadHotspotStub()` and `listFiles()` methods
+- Implemented smart strategy for handling RouterOS file operations with automatic file existence detection
+- Increased timeouts from 10 seconds to 30 seconds for large file uploads to prevent premature termination
+- Added security improvements including HTTPS-only connections and enhanced TLS verification
+- Updated interface contract to include file management operations for hotspot stub deployment
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -23,10 +26,11 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
+6. [File Upload Capabilities](#file-upload-capabilities)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
 
 ## Introduction
 This document explains the REST API client implementation used to communicate with MikroTik RouterOS v7 devices through their HTTPS-based REST endpoint. The `RestClient` class implements a unified `RouterClient` interface so that higher-level admin and portal code can call router operations without knowing whether the underlying transport is REST or legacy binary.
@@ -34,20 +38,23 @@ This document explains the REST API client implementation used to communicate wi
 The client:
 - Connects over HTTPS using cURL and HTTP Basic authentication.
 - Maps HTTP verbs to RouterOS operations such as print, add, set, remove, and command execution.
-- Normalizes RouterOS REST responses into a stable contract for hotspot user management, session control, and system monitoring.
+- Normalizes RouterOS REST responses into a stable contract for hotspot user management, session control, system monitoring, and file operations.
 - Exposes TLS verification configuration and strict error handling.
+- Provides advanced file upload capabilities with smart retry logic for RouterOS file operations.
 
 ## Project Structure
 The REST client lives under the shared `includes/RouterOS` layer and is consumed by:
 - The admin panel for router management, testing connectivity, and hotspot administration.
 - The portal-facing session API for live status lookup by MAC address.
 - The admin monitoring API for collecting router metrics.
+- The tools page for automated hotspot stub file deployment.
 
 ```mermaid
 graph TB
 Admin["Admin Panel<br/>routers.php, hotspot.php"] --> Factory["RouterFactory<br/>aircoins_router_client()"]
 Portal["Portal Session API<br/>api/session.php"] --> Factory
 Monitor["Admin Monitoring API<br/>admin/api/monitor.php"] --> Factory
+Tools["Tools Page<br/>admin/tools.php"] --> Factory
 Factory --> RestClient["RestClient<br/>REST API v7"]
 RestClient --> RouterOS["MikroTik RouterOS<br/>HTTPS /rest"]
 ```
@@ -58,6 +65,7 @@ RestClient --> RouterOS["MikroTik RouterOS<br/>HTTPS /rest"]
 - [monitor.php:131-131](file://admin/api/monitor.php#L131-L131)
 - [hotspot.php:102-102](file://admin/hotspot.php#L102-L102)
 - [hotspot.php:290-290](file://admin/hotspot.php#L290-L290)
+- [tools.php:136-186](file://admin/tools.php#L136-L186)
 - [RouterFactory.php:29-54](file://includes/RouterOS/RouterFactory.php#L29-L54)
 - [RestClient.php:24-48](file://includes/RouterOS/RestClient.php#L24-L48)
 
@@ -69,17 +77,18 @@ RestClient --> RouterOS["MikroTik RouterOS<br/>HTTPS /rest"]
 - [session.php:1-25](file://api/session.php#L1-L25)
 
 ## Core Components
-- `RouterClient`: A PHP interface defining the unified contract for both REST and legacy clients. It specifies return shapes for identity, resource usage, hotspot users, profiles, active sessions, interfaces, and connection testing.
-- `RestClient`: Implements `RouterClient` and talks to RouterOS v7 via `/rest`. It handles HTTP construction, JSON encoding/decoding, Basic auth, TLS settings, and response normalization.
+- `RouterClient`: A PHP interface defining the unified contract for both REST and legacy clients. It specifies return shapes for identity, resource usage, hotspot users, profiles, active sessions, interfaces, connection testing, and file operations.
+- `RestClient`: Implements `RouterClient` and talks to RouterOS v7 via `/rest`. It handles HTTP construction, JSON encoding/decoding, Basic auth, TLS settings, response normalization, and advanced file management operations.
 - `RouterFactory`: Builds the correct client based on stored router configuration, decrypting credentials only in memory and selecting REST when `api_type` is `rest`.
 
 Key responsibilities:
 - REST verb mapping: GET prints, PUT adds, PATCH sets, DELETE removes, POST executes commands.
 - Response normalization: RouterOS returns strings; numeric and boolean fields are cast to satisfy the interface contract.
 - `.id` handling: Router-assigned identifiers (including wildcard IDs like `*5`) are appended raw to paths.
+- File operation strategies: Smart detection of existing files with appropriate PUT/PATCH operations.
 
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-150](file://includes/RouterOS/RouterClientInterface.php#L31-L150)
 - [RestClient.php:24-48](file://includes/RouterOS/RestClient.php#L24-L48)
 - [RouterFactory.php:29-54](file://includes/RouterOS/RouterFactory.php#L29-L54)
 
@@ -95,19 +104,25 @@ participant Curl as "cURL"
 participant Router as "RouterOS /rest"
 Caller->>Factory : aircoins_router_client(routerRow)
 Factory-->>Caller : RestClient instance
-Caller->>Client : hotspotUsers()
-Client->>Curl : GET https : //host : port/rest/ip/hotspot/user
+Caller->>Client : uploadHotspotStub(path, content)
+Client->>Client : findFileId(path)
+Client->>Curl : GET https : //host : port/rest/file
 Curl->>Router : HTTP Basic + JSON headers
 Router-->>Curl : JSON array/object
 Curl-->>Client : HTTP status + body
-Client->>Client : normalize rows, cast types
-Client-->>Caller : list of hotspot users
+alt File exists
+Client->>Curl : PATCH /file/.id with contents
+else File doesn't exist
+Client->>Curl : PUT /file with name and contents
+end
+Curl-->>Client : HTTP status + body
+Client-->>Caller : true (success)
 ```
 
 **Diagram sources**
 - [RouterFactory.php:29-54](file://includes/RouterOS/RouterFactory.php#L29-L54)
-- [RestClient.php:88-104](file://includes/RouterOS/RestClient.php#L88-L104)
-- [RestClient.php:228-231](file://includes/RouterOS/RestClient.php#L228-L231)
+- [RestClient.php:460-475](file://includes/RouterOS/RestClient.php#L460-L475)
+- [RestClient.php:483-497](file://includes/RouterOS/RestClient.php#L483-L497)
 - [RestClient.php:270-316](file://includes/RouterOS/RestClient.php#L270-L316)
 
 ## Detailed Component Analysis
@@ -123,13 +138,14 @@ Client-->>Caller : list of hotspot users
   - Interface listing with traffic counters: `/interface`.
   - MAC-based session lookup: `/ip/hotspot/active?mac=...`.
   - Command execution: `POST` to arbitrary REST paths with JSON bodies.
+  - **New**: File upload with smart strategy: `uploadHotspotStub()` and `listFiles()`.
 
 HTTP request construction:
 - Base URL is built from scheme, host, port, and `/rest`.
 - Query strings are appended directly when provided.
 - Headers include `Content-Type: application/json` and `Accept: application/json`.
 - Authentication uses HTTP Basic with the configured username and password.
-- Timeouts: total timeout 10 seconds, connection timeout 5 seconds.
+- Timeouts: total timeout configurable (default 10s, increased to 30s for file uploads), connection timeout 5 seconds.
 - TLS options: peer verification and hostname verification are controlled by `tls_verify`.
 
 Response parsing:
@@ -156,6 +172,8 @@ class RouterClient {
 +kickSession(id) bool
 +interfaces() array
 +findActiveByMac(mac) array|null
++uploadHotspotStub(path, content) bool
++listFiles(dir) array
 }
 class RestClient {
 -string host
@@ -179,7 +197,10 @@ class RestClient {
 +interfaces() array
 +findActiveByMac(mac) array|null
 +command(path, body) array
--request(method, path, body, query) array
++uploadHotspotStub(path, content) bool
++listFiles(dir) array
+-request(method, path, body, query, timeout) array
+-findFileId(name) string|null
 -buildError(status, decoded) string
 -asList(rows) array
 -mapSession(row) array
@@ -191,13 +212,13 @@ RouterClient <|.. RestClient : "implements"
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
+- [RouterClientInterface.php:31-150](file://includes/RouterOS/RouterClientInterface.php#L31-L150)
+- [RestClient.php:24-519](file://includes/RouterOS/RestClient.php#L24-L519)
 
 #### HTTP Request Construction Flow
 ```mermaid
 flowchart TD
-Start(["request(method, path, body, query)"]) --> BuildUrl["Build base URL + path + optional query"]
+Start(["request(method, path, body, query, timeout)"]) --> BuildUrl["Build base URL + path + optional query"]
 BuildUrl --> InitCurl["Initialize cURL handle"]
 InitCurl --> SetOptions["Set URL, method, headers, auth, timeouts, TLS flags"]
 SetOptions --> HasBody{"Has JSON body?"}
@@ -282,10 +303,12 @@ Important contracts:
 - `activeSessions()` returns a list of session records with bytes-in/out as integers.
 - `interfaces()` returns interface records with running state and traffic counters.
 - `testConnection()` returns a health check result including router name and version.
+- **New**: `uploadHotspotStub()` uploads files to router filesystem with smart retry logic.
+- **New**: `listFiles()` lists files in router filesystem directories.
 
 **Section sources**
 - [RouterClientInterface.php:9-23](file://includes/RouterOS/RouterClientInterface.php#L9-L23)
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-150](file://includes/RouterOS/RouterClientInterface.php#L31-L150)
 
 ### RouterFactory Integration
 The factory:
@@ -298,6 +321,7 @@ Usage patterns:
 - Admin router auto-detect probes both REST and Legacy APIs.
 - Admin test connection calls `testConnection()` and updates last status/error.
 - Portal session API iterates enabled routers and finds an active session by MAC.
+- Tools page uses file operations for hotspot stub deployment.
 
 **Section sources**
 - [RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
@@ -305,12 +329,78 @@ Usage patterns:
 - [routers.php:116-141](file://admin/routers.php#L116-L141)
 - [session.php:67-78](file://api/session.php#L67-L78)
 
+## File Upload Capabilities
+
+### Enhanced File Management Strategy
+The REST client now includes sophisticated file upload capabilities designed specifically for RouterOS file operations:
+
+#### Smart Upload Strategy
+The `uploadHotspotStub()` method implements a two-phase approach:
+1. **File Detection**: First checks if the target file already exists by querying `/file` endpoint
+2. **Conditional Upload**: Uses PATCH for existing files (content update) or PUT for new files (creation)
+3. **Base64 Encoding**: Encodes file content as base64 for reliable transmission over REST API
+4. **Extended Timeouts**: Uses 30-second timeouts for file operations to accommodate larger files
+
+#### File Listing Functionality
+The `listFiles()` method provides directory browsing capabilities:
+- Retrieves all files from RouterOS filesystem via `/file` endpoint
+- Filters results client-side since RouterOS REST doesn't reliably support regex filters
+- Returns structured data with filename, type, and size information
+
+```mermaid
+flowchart TD
+UploadStart["uploadHotspotStub(path, content)"] --> Encode["Base64 encode content"]
+Encode --> FindId["findFileId(path)"]
+FindId --> QueryFiles["GET /file"]
+QueryFiles --> SearchMatch{"File found?"}
+SearchMatch --> |Yes| PatchUpdate["PATCH /file/.id with contents"]
+SearchMatch --> |No| PutCreate["PUT /file with name and contents"]
+PatchUpdate --> Success["Return true"]
+PutCreate --> Success
+```
+
+**Diagram sources**
+- [RestClient.php:460-475](file://includes/RouterOS/RestClient.php#L460-L475)
+- [RestClient.php:483-497](file://includes/RouterOS/RestClient.php#L483-L497)
+
+#### Timeout Enhancements
+- **Standard operations**: 10-second timeout for typical REST operations
+- **File operations**: 30-second timeout for file uploads to prevent premature termination during large file transfers
+- **Connection timeout**: Consistent 5-second connection establishment timeout
+
+#### Error Handling
+- Graceful fallback when file listing fails (attempts PUT operation anyway)
+- Comprehensive error messages including HTTP status and RouterOS error details
+- Exception propagation for proper error handling at caller level
+
+**Section sources**
+- [RestClient.php:460-519](file://includes/RouterOS/RestClient.php#L460-L519)
+
+### Tools Page Integration
+The tools page leverages these new capabilities for automated hotspot stub deployment:
+
+#### Diagnostic Capabilities
+- Lists files in `flash/hotspot/` directory using `listFiles()`
+- Analyzes file sizes to detect full portal vs thin stub files
+- Provides detailed diagnostic output showing file status and issues
+
+#### Automated Fix Process
+- Iterates through predefined stub templates (login.html, alogin.html, error.html, logout.html)
+- Replaces SBC IP placeholders in templates before upload
+- Uses `uploadHotspotStub()` for reliable file deployment
+- Provides comprehensive success/failure reporting
+
+**Section sources**
+- [tools.php:134-207](file://admin/tools.php#L134-L207)
+- [tools.php:269-324](file://admin/tools.php#L269-L324)
+
 ## Dependency Analysis
 The REST client depends on:
 - cURL for HTTP transport.
 - RouterOS REST API endpoints for data and commands.
 - The factory for instantiation and credential resolution.
 - Higher-level controllers for invoking operations.
+- File system operations for RouterOS file management.
 
 ```mermaid
 graph LR
@@ -318,8 +408,10 @@ RoutersPage["admin/routers.php"] --> Factory["includes/RouterOS/RouterFactory.ph
 SessionApi["api/session.php"] --> Factory
 MonitorApi["admin/api/monitor.php"] --> Factory
 HotspotAdmin["admin/hotspot.php"] --> Factory
+ToolsPage["admin/tools.php"] --> Factory
 Factory --> RestClient["includes/RouterOS/RestClient.php"]
 RestClient --> RouterOS["RouterOS /rest"]
+RestClient --> FileOps["RouterOS /file operations"]
 ```
 
 **Diagram sources**
@@ -328,6 +420,7 @@ RestClient --> RouterOS["RouterOS /rest"]
 - [monitor.php:131-131](file://admin/api/monitor.php#L131-L131)
 - [hotspot.php:102-102](file://admin/hotspot.php#L102-L102)
 - [hotspot.php:290-290](file://admin/hotspot.php#L290-L290)
+- [tools.php:136-186](file://admin/tools.php#L136-L186)
 - [RouterFactory.php:29-54](file://includes/RouterOS/RouterFactory.php#L29-L54)
 - [RestClient.php:24-48](file://includes/RouterOS/RestClient.php#L24-L48)
 
@@ -336,15 +429,18 @@ RestClient --> RouterOS["RouterOS /rest"]
 - [RestClient.php:22-24](file://includes/RouterOS/RestClient.php#L22-L24)
 
 ## Performance Considerations
-- Connection and request timeouts are fixed at 5 seconds for connection establishment and 10 seconds for total request duration.
+- Connection and request timeouts are fixed at 5 seconds for connection establishment and 10 seconds for total request duration (30 seconds for file operations).
 - No retry logic is implemented inside `RestClient`; failures are surfaced as exceptions to callers.
 - Response normalization avoids unnecessary allocations by returning empty arrays for empty or non-array responses.
 - MAC lookups use URL-encoded MAC addresses to avoid encoding issues.
+- File operations use base64 encoding for reliable transmission and extended timeouts for large files.
+- File listing performs client-side filtering since RouterOS REST doesn't support reliable regex filtering.
 
 Recommendations:
 - If high latency or intermittent network issues occur, consider adding retry logic at the caller level with exponential backoff.
 - Batch operations where possible to reduce per-request overhead.
 - Cache static configuration (profiles, interfaces) if repeatedly accessed within a short time window.
+- Monitor file upload performance and adjust timeouts based on network conditions and file sizes.
 
 [No sources needed since this section provides general guidance]
 
@@ -400,6 +496,7 @@ Checks:
 **Updated** RouterOS API compatibility fixes have been applied:
 - Attribute names corrected from `uptime-limit` to `limit-uptime` for hotspot user operations
 - Endpoint paths updated from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for profile operations
+- File operations now use robust strategies compatible with RouterOS v7 REST API limitations
 
 Relevant behavior:
 - The factory selects REST when `api_type` is `rest`.
@@ -409,6 +506,27 @@ Relevant behavior:
 - [RouterFactory.php:48-54](file://includes/RouterOS/RouterFactory.php#L48-L54)
 - [RestClient.php:54-65](file://includes/RouterOS/RestClient.php#L54-L65)
 - [routers.php:74-96](file://admin/routers.php#L74-L96)
+
+### File Upload Issues
+Symptoms:
+- File uploads fail or timeout during large file transfers.
+- RouterOS file operations return unexpected errors.
+- Hotspot stub files not deploying correctly.
+
+Checks:
+- Verify RouterOS file permissions and available storage space.
+- Check network connectivity and ensure adequate timeouts for large files.
+- Confirm that the target directory exists and is writable.
+- Validate file content encoding (base64) and size limits.
+
+Relevant behavior:
+- File uploads use 30-second timeouts to accommodate larger files.
+- Smart strategy automatically detects existing files and uses appropriate HTTP methods.
+- File listing performs client-side filtering due to RouterOS REST API limitations.
+
+**Section sources**
+- [RestClient.php:460-519](file://includes/RouterOS/RestClient.php#L460-L519)
+- [tools.php:134-207](file://admin/tools.php#L134-L207)
 
 ### Error Handling Strategies
 - Transport failures (e.g., DNS, connection refused, TLS errors) throw a `RuntimeException` with the cURL error.
@@ -426,14 +544,15 @@ Best practices:
 - [routers.php:125-141](file://admin/routers.php#L125-L141)
 
 ### Connection Timeout Management
-- Total request timeout is 10 seconds; connection timeout is 5 seconds.
+- Total request timeout is 10 seconds for standard operations; 30 seconds for file operations; connection timeout is 5 seconds.
 - Long-running commands may exceed these limits; consider adjusting timeouts at the caller level if necessary.
 - Avoid excessive concurrent requests to prevent overwhelming the router or the web server.
 
 **Section sources**
 - [RestClient.php:288-289](file://includes/RouterOS/RestClient.php#L288-L289)
+- [RestClient.php:469-472](file://includes/RouterOS/RestClient.php#L469-L472)
 
 ## Conclusion
-The REST API client provides a clean, secure, and consistent way to manage MikroTik RouterOS v7 devices through HTTPS. By implementing a unified interface, it allows the admin panel and portal to operate across different router implementations without coupling to transport details. Proper TLS configuration, robust error handling, and clear endpoint mappings make it suitable for hotspot user management, session control, and system monitoring. Recent RouterOS API compatibility fixes ensure proper attribute naming and endpoint path resolution for optimal RouterOS v7 integration. For enhanced reliability, callers may add retry logic and caching around the client's operations.
+The REST API client provides a clean, secure, and consistent way to manage MikroTik RouterOS v7 devices through HTTPS. By implementing a unified interface, it allows the admin panel and portal to operate across different router implementations without coupling to transport details. Proper TLS configuration, robust error handling, and clear endpoint mappings make it suitable for hotspot user management, session control, system monitoring, and file operations. Recent enhancements include comprehensive file upload capabilities with smart retry logic, increased timeouts for large file transfers, and improved security measures including HTTPS-only connections. The addition of file management operations enables automated deployment of hotspot stub files, making the system more robust and easier to maintain. These improvements ensure optimal RouterOS v7 integration while providing enhanced reliability and security for enterprise deployments.
 
 [No sources needed since this section summarizes without analyzing specific files]

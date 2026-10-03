@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: ""
-title: AIRCOINS NETFI MikroTik Hotspot Controller
+title: AIRCOINS MikroTik Hotspot Controller
 scope:
     - .gitattributes
     - DEPLOYMENT.md

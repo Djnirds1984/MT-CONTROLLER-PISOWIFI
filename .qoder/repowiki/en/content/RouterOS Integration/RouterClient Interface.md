@@ -10,9 +10,11 @@
 
 ## Update Summary
 **Changes Made**
-- Updated hotspot user attribute documentation to reflect corrected naming from 'uptime-limit' to 'limit-uptime'
-- Added clarification about MikroTik API attribute naming conventions
-- Enhanced method signature reference with accurate attribute names
+- Added documentation for new file management methods: uploadHotspotStub() and listFiles()
+- Updated method signature reference to include the new file management capabilities
+- Enhanced architecture diagrams to show file management functionality
+- Added detailed implementation details for both REST and Legacy API clients
+- Updated troubleshooting guide with file-related error handling patterns
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -33,6 +35,8 @@ This document explains the RouterClient abstraction layer that unifies access to
 
 The design allows the admin panel and portal session API to switch between REST and Legacy backends without changing business logic. It also supports testing with mock implementations and future protocol extensions by adding new classes that implement the same interface.
 
+**Updated** The interface now includes comprehensive file management capabilities for uploading hotspot stub files and listing router filesystem contents, enabling dynamic content deployment and management.
+
 ## Project Structure
 The RouterOS client layer lives under `includes/RouterOS` and consists of:
 - An interface defining the contract
@@ -50,9 +54,11 @@ end
 subgraph "Consumers"
 ADMIN["Admin Panel"]
 API["Portal Session API"]
+TOOLS["File Management Tools"]
 end
 ADMIN --> RF
 API --> RF
+TOOLS --> RF
 RF --> RC
 RF --> LA
 RC --> IF
@@ -60,10 +66,10 @@ LA --> IF
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
-- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
-- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
-- [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
+- [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
+- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [RouterFactory.php:29-56](file://includes/RouterOS/RouterFactory.php#L29-L56)
 
 **Section sources**
 - [RouterClientInterface.php:1-27](file://includes/RouterOS/RouterClientInterface.php#L1-L27)
@@ -81,16 +87,17 @@ The core components are:
 Key responsibilities:
 - Connection management: connection probing, authentication, and resource handling
 - Command execution: reading identity, resources, hotspot users/profiles, active sessions, interfaces
+- File management: uploading hotspot stub files and listing router filesystem contents
 - Error handling: consistent RuntimeException usage across implementations
 - Data normalization: converting raw API responses into stable shapes expected by consumers
 
-**Updated** Corrected hotspot user attribute naming from 'uptime-limit' to 'limit-uptime' to match MikroTik API specifications
+**Updated** Enhanced with comprehensive file management capabilities including hotspot stub file uploads and directory listing functionality
 
 **Section sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
-- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
-- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
-- [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
+- [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
+- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [RouterFactory.php:29-56](file://includes/RouterOS/RouterFactory.php#L29-L56)
 
 ## Architecture Overview
 The RouterClient architecture follows a simple strategy pattern:
@@ -116,6 +123,7 @@ class RouterClient {
 +interfaces() array
 +findActiveByMac(mac) array|null
 +uploadHotspotStub(path, content) bool
++listFiles(dir) array
 }
 class RestClient {
 -host string
@@ -131,6 +139,7 @@ class RestClient {
 -put(path, body) array
 -patch(path, body) array
 -delete(path) array
+-findFileId(name) string|null
 }
 class LegacyApiClient {
 -sock resource
@@ -161,15 +170,15 @@ RouterFactory --> LegacyApiClient : "creates otherwise"
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
-- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
-- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
-- [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
+- [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
+- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [RouterFactory.php:29-56](file://includes/RouterOS/RouterFactory.php#L29-L56)
 
 ## Detailed Component Analysis
 
 ### RouterClient Interface Contract
-The RouterClient interface defines the complete set of operations required to manage RouterOS hotspot functionality and device information. All methods have strict return types documented via PHPDoc annotations.
+The RouterClient interface defines the complete set of operations required to manage RouterOS hotspot functionality, device information, and file system operations. All methods have strict return types documented via PHPDoc annotations.
 
 Core method categories:
 - Connection and diagnostics: testConnection, identity, resource
@@ -177,17 +186,18 @@ Core method categories:
 - Hotspot profile management: hotspotProfiles, addHotspotProfile, deleteHotspotProfile
 - Session management: activeSessions, kickSession, findActiveByMac
 - Network monitoring: interfaces
-- File management: uploadHotspotStub
+- **New** File management: uploadHotspotStub, listFiles
 
 Return value conventions:
 - Lists are arrays of associative arrays with consistent keys
 - Booleans are coerced from RouterOS string representations
 - Uptime is normalized to seconds
 - Optional fields use safe defaults when missing
-- **Updated** Hotspot user records include 'limit-uptime' attribute (not 'uptime-limit') to match MikroTik API specifications
+- Hotspot user records include 'limit-uptime' attribute (not 'uptime-limit') to match MikroTik API specifications
 
 Exception handling:
 - Methods may throw RuntimeException for network failures, authentication errors, or invalid responses
+- File operations throw RuntimeException for upload/list failures
 - Implementations must maintain this contract so callers can uniformly handle errors
 
 ```mermaid
@@ -203,12 +213,12 @@ ReturnResult --> End(["Method Exit"])
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
-- [RestClient.php:54-471](file://includes/RouterOS/RestClient.php#L54-L471)
-- [LegacyApiClient.php:429-677](file://includes/RouterOS/LegacyApiClient.php#L429-L677)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
+- [RestClient.php:54-520](file://includes/RouterOS/RestClient.php#L54-L520)
+- [LegacyApiClient.php:429-692](file://includes/RouterOS/LegacyApiClient.php#L429-L692)
 
 **Section sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
 
 ### RestClient Implementation
 The RestClient implements RouterClient using RouterOS v7 REST API over HTTPS with HTTP Basic authentication and JSON payloads.
@@ -232,7 +242,14 @@ Data normalization:
 - Converts string values to appropriate PHP types (float, int, bool)
 - Parses RouterOS uptime format to seconds
 - Normalizes boolean-like strings ("true", "yes", "1") to PHP booleans
-- **Updated** Uses 'limit-uptime' attribute for hotspot user creation and retrieval
+- Uses 'limit-uptime' attribute for hotspot user creation and retrieval
+
+**New** File management implementation:
+- uploadHotspotStub(): Implements smart file upload with existence checking
+- Uses PATCH for existing files, PUT for new files
+- Includes helper method findFileId() to locate existing files
+- listFiles(): Filters router file listings by directory prefix
+- Handles base64 encoding for file contents in REST API
 
 ```mermaid
 sequenceDiagram
@@ -240,26 +257,30 @@ participant Caller as "Caller Code"
 participant Client as "RestClient"
 participant HTTP as "cURL HTTP"
 participant Router as "RouterOS REST API"
-Caller->>Client : testConnection()
-Client->>Client : identity()
-Client->>HTTP : GET /system/identity
+Caller->>Client : uploadHotspotStub(path, content)
+Client->>Client : findFileId(path)
+Client->>HTTP : GET /file
 HTTP->>Router : HTTP Request
 Router-->>HTTP : JSON Response
 HTTP-->>Client : Decoded Array
-Client->>Client : resource()
-Client->>HTTP : GET /system/resource
+alt File Exists
+Client->>HTTP : PATCH /file/.id
 HTTP->>Router : HTTP Request
-Router-->>HTTP : JSON Response
-HTTP-->>Client : Decoded Array
-Client-->>Caller : {ok, name, version, board-name}
+Router-->>HTTP : Success Response
+else File Does Not Exist
+Client->>HTTP : PUT /file
+HTTP->>Router : HTTP Request
+Router-->>HTTP : Created Response
+end
+Client-->>Caller : true
 ```
 
 **Diagram sources**
-- [RestClient.php:54-86](file://includes/RouterOS/RestClient.php#L54-L86)
-- [RestClient.php:270-471](file://includes/RouterOS/RestClient.php#L270-L471)
+- [RestClient.php:459-497](file://includes/RouterOS/RestClient.php#L459-L497)
+- [RestClient.php:499-518](file://includes/RouterOS/RestClient.php#L499-L518)
 
 **Section sources**
-- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
+- [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
 
 ### LegacyApiClient Implementation
 The LegacyApiClient implements RouterClient using the RouterOS binary "sentence" protocol over TCP (8728) or TLS (8729).
@@ -287,7 +308,12 @@ Additional capabilities:
 - writeSentence(), readSentence(), parseSentence() for low-level protocol interaction
 - cmd() method for sending commands and collecting records
 - exec() internal method returning both records and done attributes
-- **Updated** Uses 'limit-uptime' attribute for hotspot user creation and retrieval
+- Uses 'limit-uptime' attribute for hotspot user creation and retrieval
+
+**New** File management implementation:
+- uploadHotspotStub(): Directly sends file contents via binary protocol
+- Leverages native binary protocol support for arbitrary byte data
+- listFiles(): Uses regex-based filtering with '~' operator for efficient directory listing
 
 ```mermaid
 sequenceDiagram
@@ -317,7 +343,7 @@ Client-->>Caller : Authenticated
 - [LegacyApiClient.php:101-167](file://includes/RouterOS/LegacyApiClient.php#L101-L167)
 
 **Section sources**
-- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
+- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
 
 ### Factory Function
 The aircoins_router_client factory function provides centralized client instantiation with secure credential handling.
@@ -339,14 +365,14 @@ Configuration resolution:
 - Validates and normalizes all configuration parameters
 
 **Section sources**
-- [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
+- [RouterFactory.php:29-56](file://includes/RouterOS/RouterFactory.php#L29-L56)
 
 ## Dependency Analysis
 The RouterOS client layer has clear dependency relationships:
 
 ```mermaid
 graph LR
-Consumer["Admin Panel / Portal API"] --> Factory["aircoins_router_client()"]
+Consumer["Admin Panel / Portal API / Tools"] --> Factory["aircoins_router_client()"]
 Factory --> Interface["RouterClient Interface"]
 Factory --> REST["RestClient"]
 Factory --> Legacy["LegacyApiClient"]
@@ -357,7 +383,7 @@ Legacy --> Socket["PHP Streams"]
 ```
 
 **Diagram sources**
-- [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
+- [RouterFactory.php:29-56](file://includes/RouterOS/RouterFactory.php#L29-L56)
 - [RestClient.php:270-316](file://includes/RouterOS/RestClient.php#L270-L316)
 - [LegacyApiClient.php:70-94](file://includes/RouterOS/LegacyApiClient.php#L70-L94)
 
@@ -372,7 +398,7 @@ Potential circular dependencies:
 - Factory depends on both implementations but they don't depend on the factory
 
 **Section sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
 - [RestClient.php:22-25](file://includes/RouterOS/RestClient.php#L22-L25)
 - [LegacyApiClient.php:20-23](file://includes/RouterOS/LegacyApiClient.php#L20-L23)
 - [RouterFactory.php:12-15](file://includes/RouterOS/RouterFactory.php#L12-L15)
@@ -385,20 +411,21 @@ REST Client:
 - JSON serialization/deserialization overhead
 - Suitable for high-frequency operations due to lightweight nature
 - Configurable timeouts prevent hanging connections
+- File operations involve base64 encoding overhead
 
 Legacy Client:
 - Persistent socket connections reduce connection overhead
 - Binary protocol more efficient than JSON for large datasets
 - Lower bandwidth usage due to compact encoding
 - Connection management adds complexity but improves throughput
+- Native binary protocol support for file operations
 
 Optimization opportunities:
 - Connection reuse for frequent operations
 - Batch operations where supported by RouterOS
 - Caching of frequently accessed data (users, profiles, interfaces)
 - Asynchronous operations for non-critical tasks
-
-[No sources needed since this section provides general guidance]
+- Efficient file listing with server-side filtering (Legacy) vs client-side filtering (REST)
 
 ## Troubleshooting Guide
 Common issues and their handling patterns:
@@ -417,13 +444,20 @@ Data parsing errors:
 - Invalid RouterOS responses cause parsing exceptions
 - Missing fields handled with safe defaults to prevent crashes
 - Type coercion ensures consistent return formats
-- **Updated** Attribute naming mismatches (e.g., 'uptime-limit' vs 'limit-uptime') should be resolved by using the correct MikroTik API attribute names
+- Attribute naming mismatches (e.g., 'uptime-limit' vs 'limit-uptime') should be resolved by using the correct MikroTik API attribute names
+
+**New** File management issues:
+- Upload failures: Check file permissions and available disk space on router
+- List failures: Verify directory paths and RouterOS file system structure
+- REST-specific: Ensure proper base64 encoding for file contents
+- Legacy-specific: Verify binary protocol compatibility with router firmware
 
 Debugging strategies:
 - Enable detailed logging in development environments
 - Use testConnection() to verify basic connectivity
 - Check router configuration for API access permissions
 - Verify TLS settings match router certificate configuration
+- Test file operations with small files first to validate connectivity
 
 **Section sources**
 - [RestClient.php:270-340](file://includes/RouterOS/RestClient.php#L270-L340)
@@ -435,12 +469,11 @@ The RouterClient interface provides a robust abstraction layer for RouterOS API 
 - Consistent error handling and return value formats
 - Easy testing with mock implementations
 - Future extibility for new protocols or API versions
+- Comprehensive file management capabilities for dynamic content deployment
 
 The design successfully separates concerns between API contracts and transport implementations while maintaining simplicity for consumers. The factory pattern ensures secure credential handling and easy switching between backend implementations.
 
-This architecture supports the project's goal of providing unified access to MikroTik routers regardless of firmware version or available API endpoints, making it easier to maintain and extend the system as RouterOS evolves.
-
-[No sources needed since this section summarizes without analyzing specific files]
+This architecture supports the project's goal of providing unified access to MikroTik routers regardless of firmware version or available API endpoints, making it easier to maintain and extend the system as RouterOS evolves. The addition of file management capabilities enables sophisticated hotspot customization and dynamic content deployment scenarios.
 
 ## Appendices
 
@@ -450,7 +483,7 @@ Complete method signatures that implementers must follow:
 - testConnection(): array - Probes router reachability and credentials
 - identity(): array - Returns router identity information  
 - resource(): array - Returns system resource statistics
-- hotspotUsers(): array - Lists all hotspot users with 'limit-uptime' attribute (not 'uptime-limit')
+- hotspotUsers(): array - Lists all hotspot users with 'limit-uptime' attribute
 - addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array - Creates new hotspot user with 'limit-uptime' attribute
 - deleteHotspotUser(string $id): bool - Removes hotspot user by ID
 - hotspotProfiles(): array - Lists all hotspot profiles with 'uptime-limit' attribute
@@ -460,12 +493,13 @@ Complete method signatures that implementers must follow:
 - kickSession(string $id): bool - Disconnects active session by ID
 - interfaces(): array - Lists router interfaces with traffic counters
 - findActiveByMac(string $mac): ?array - Finds active session by MAC address
-- uploadHotspotStub(string $path, string $content): bool - Uploads hotspot stub files
+- **New** uploadHotspotStub(string $path, string $content): bool - Uploads hotspot stub files to router filesystem
+- **New** listFiles(string $dir): array - Lists files in router filesystem directory
 
-**Updated** Corrected hotspot user attribute naming from 'uptime-limit' to 'limit-uptime' to match MikroTik API specifications
+**Updated** Added comprehensive file management methods for hotspot stub deployment and filesystem navigation
 
 **Section sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
 
 ### Testing with Mock Implementations
 To test code that uses RouterClient, create a mock implementation:
@@ -474,6 +508,8 @@ To test code that uses RouterClient, create a mock implementation:
 class MockRouterClient implements RouterClient {
     // Implement all required methods with test data
     public function testConnection(): array { return ['ok' => true, 'name' => 'test', 'version' => '7.0', 'board-name' => 'test']; }
+    public function uploadHotspotStub(string $path, string $content): bool { return true; }
+    public function listFiles(string $dir): array { return [['name' => 'test.html', 'type' => 'html', 'size' => 100]]; }
     // ... implement other methods
 }
 ```
@@ -483,9 +519,10 @@ Benefits of this approach:
 - Predictable test data and behavior
 - Fast test execution
 - Isolation from external system changes
+- Ability to simulate file system operations without actual router access
 
 **Section sources**
-- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
 
 ### MikroTik API Attribute Naming Conventions
 Important attribute naming conventions for RouterOS API:
@@ -501,10 +538,18 @@ Important attribute naming conventions for RouterOS API:
 - `shared-users` - Number of concurrent users allowed
 - `idle-timeout` - Idle timeout configuration
 
-**Note:** The distinction between `limit-uptime` (for individual users) and `uptime-limit` (for profiles) is crucial for proper RouterOS API communication.
+**File System Operations:**
+- REST API: Files are stored with base64-encoded contents
+- Legacy API: Files are sent as raw binary data
+- Directory filtering: Legacy API supports regex patterns with '~' operator
+- File identification: RouterOS assigns unique '.id' values to all files
+
+**Note:** The distinction between `limit-uptime` (for individual users) and `uptime-limit` (for profiles) is crucial for proper RouterOS API communication. File operations require careful handling of encoding differences between REST and Legacy protocols.
 
 **Section sources**
 - [RestClient.php:99-114](file://includes/RouterOS/RestClient.php#L99-L114)
 - [LegacyApiClient.php:476-491](file://includes/RouterOS/LegacyApiClient.php#L476-L491)
 - [RestClient.php:145-157](file://includes/RouterOS/RestClient.php#L145-L157)
 - [LegacyApiClient.php:522-534](file://includes/RouterOS/LegacyApiClient.php#L522-L534)
+- [RestClient.php:459-518](file://includes/RouterOS/RestClient.php#L459-L518)
+- [LegacyApiClient.php:667-690](file://includes/RouterOS/LegacyApiClient.php#L667-L690)
