@@ -22,13 +22,9 @@ aircoins_schema($pdo);
 
 $action = (string) ($_REQUEST['action'] ?? '');
 
-// ---- Enabled routers for sync / kick --------------------------------------
-$routerList = [];
-try {
-    $routerList = $pdo->query('SELECT id, name, host, api_type FROM routers WHERE disabled = 0 ORDER BY name COLLATE NOCASE ASC')->fetchAll();
-} catch (Throwable $e) {
-    $routerList = [];
-}
+// ---- Session-selected router -----------------------------------------------
+$routerId = aircoins_selected_router_id();
+$router   = aircoins_selected_router($pdo);
 
 // ---- POST handlers ---------------------------------------------------------
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -38,8 +34,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
     // ---- Sync devices from MikroTik active sessions ------------------------
     if ($action === 'sync') {
-        $routerId = (int) ($_POST['router_id'] ?? 0);
-        $router   = $routerId > 0 ? aircoins_get_router($pdo, $routerId) : null;
         if (!$router) {
             aircoins_flash('error', 'Select a router first.');
             header($back);
@@ -249,10 +243,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
     // ---- Kick session ------------------------------------------------------
     if ($action === 'kick') {
-        $routerId = (int) ($_POST['router_id'] ?? 0);
         $sessId   = (string) ($_POST['session_id'] ?? '');
         $mac      = (string) ($_POST['mac'] ?? '');
-        $router   = $routerId > 0 ? aircoins_get_router($pdo, $routerId) : null;
         if (!$router || $sessId === '') {
             aircoins_flash('error', 'Missing router or session id.');
             header($back);
@@ -286,15 +278,15 @@ try {
 // ---- Classify devices as online/offline using MikroTik active sessions -----
 $activeMacs = [];
 $activeByRouter = [];
-foreach ($routerList as $rl) {
+if ($router) {
     try {
-        $client   = aircoins_router_client($rl);
+        $client   = aircoins_router_client($router);
         $sessions = $client->activeSessions();
         foreach ($sessions as $s) {
             $m = strtoupper((string) ($s['mac'] ?? ''));
             if ($m !== '') {
                 $activeMacs[$m] = true;
-                $activeByRouter[$m] = ['router_id' => (int) $rl['id'], 'session_id' => (string) ($s['.id'] ?? ''), 'uptime' => (string) ($s['uptime'] ?? '')];
+                $activeByRouter[$m] = ['router_id' => (int) $router['id'], 'session_id' => (string) ($s['.id'] ?? ''), 'uptime' => (string) ($s['uptime'] ?? '')];
             }
         }
     } catch (Throwable $e) {
@@ -311,16 +303,8 @@ aircoins_header('Devices', 'devices');
     <form method="post" action="devices.php" class="row row--between" style="gap:14px">
       <?php echo csrf_field(); ?>
       <input type="hidden" name="action" value="sync">
-      <div class="row" style="flex:1;min-width:240px">
-        <label class="label" for="sync-router" style="white-space:nowrap">Sync from</label>
-        <select class="select" id="sync-router" name="router_id" style="max-width:360px">
-          <option value="">— select router —</option>
-          <?php foreach ($routerList as $rr): ?>
-            <option value="<?php echo (int) $rr['id']; ?>"><?php echo e((string) $rr['name'] . ' (' . $rr['host'] . ')'); ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <button class="btn btn--primary btn--sm" type="submit">
+      <p class="hint" style="margin:0">Sync devices from the selected router's active sessions and DHCP leases.</p>
+      <button class="btn btn--primary btn--sm" type="submit" <?php echo !$router ? 'disabled' : ''; ?>>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8Zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3Z"/></svg>
         Sync devices
       </button>
@@ -465,13 +449,12 @@ aircoins_header('Devices', 'devices');
                     data-hostname="<?php echo e((string) ($d['hostname'] ?? '')); ?>"
                     data-status="<?php echo e($dbStatus); ?>"
                     data-session="<?php echo e((string) ($d['session_time'] ?? '')); ?>">Edit</button>
-                  <?php if ($isOnline && isset($activeByRobot[strtoupper($mac)])):
-                    $info = $activeByRobot[strtoupper($mac)];
+                  <?php if ($isOnline && isset($activeByRouter[strtoupper($mac)])):
+                    $info = $activeByRouter[strtoupper($mac)];
                   ?>
                     <form method="post" action="devices.php" style="display:inline">
                       <?php echo csrf_field(); ?>
                       <input type="hidden" name="action" value="kick">
-                      <input type="hidden" name="router_id" value="<?php echo (int) $info['router_id']; ?>">
                       <input type="hidden" name="session_id" value="<?php echo e($info['session_id']); ?>">
                       <input type="hidden" name="mac" value="<?php echo e($mac); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"

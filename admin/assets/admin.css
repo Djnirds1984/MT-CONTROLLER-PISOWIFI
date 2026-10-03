@@ -243,6 +243,9 @@ h1, h2, h3, h4 {
   letter-spacing: .08em;
 }
 .topbar__spacer { flex: 1; }
+.topbar__router-sel { display: flex; align-items: center; gap: 8px; margin-right: 18px; }
+.topbar__router-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; }
+.topbar__router-sel .select { padding: 6px 28px 6px 10px; font-size: 13px; min-width: 180px; }
 .topbar__user { display: flex; align-items: center; gap: 10px; }
 .topbar__name { font-weight: 600; font-size: 14px; color: var(--ink-soft); }
 .avatar {

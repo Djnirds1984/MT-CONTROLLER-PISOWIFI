@@ -67,18 +67,9 @@ function aircoins_minutes_to_time(int $minutes): string
     return implode('', $parts);
 }
 
-// Enabled routers for the selector.
-$routerList = [];
-try {
-    $st = $pdo->query('SELECT id, name, host, api_type FROM routers ORDER BY name COLLATE NOCASE ASC');
-    $routerList = $st ? $st->fetchAll() : [];
-} catch (Throwable $e) {
-    $routerList = [];
-}
-
-// Selected router id (POST wins over GET so actions stay on the same device).
-$routerId = (int) ($_POST['router_id'] ?? $_GET['router'] ?? 0);
-$router   = $routerId > 0 ? aircoins_get_router($pdo, $routerId) : null;
+// Selected router from the global topbar selector (session).
+$routerId = aircoins_selected_router_id();
+$router   = aircoins_selected_router($pdo);
 
 // ---------------------------------------------------------------------------
 // POST actions
@@ -87,7 +78,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     csrf_verify();
 
     $action = (string) ($_POST['action'] ?? '');
-    $back   = 'Location: hotspot.php' . ($routerId > 0 ? '?router=' . $routerId : '');
+    $back   = 'Location: hotspot.php';
 
     if (!$router) {
         aircoins_flash('error', 'Select a router first.');
@@ -323,31 +314,7 @@ try {
 aircoins_header('Hotspot', 'hotspot');
 ?>
 
-<div class="card" style="margin-bottom:20px">
-  <div class="card__body">
-    <form method="get" action="hotspot.php" class="row row--between" style="gap:14px">
-      <div class="row" style="flex:1;min-width:240px">
-        <label class="label" for="router-select" style="white-space:nowrap">Router</label>
-        <select class="select" id="router-select" name="router" style="max-width:360px" onchange="this.form.submit()">
-          <option value="">— select a router —</option>
-          <?php foreach ($routerList as $rr): ?>
-            <option value="<?php echo (int) $rr['id']; ?>" <?php echo $routerId === (int) $rr['id'] ? 'selected' : ''; ?>>
-              <?php echo e((string) $rr['name'] . ' (' . $rr['host'] . ' · ' . strtoupper((string) $rr['api_type']) . ')'); ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-        <noscript><button class="btn btn--ghost btn--sm" type="submit">Load</button></noscript>
-      </div>
-      <?php if ($router): ?>
-        <div class="row">
-          <span class="badge <?php echo strtolower((string) $router['api_type']) === 'rest' ? 'badge--rest' : 'badge--legacy'; ?>"><?php echo e(strtoupper((string) $router['api_type'])); ?></span>
-          <?php if ((int) $router['disabled'] === 1): ?><span class="badge badge--off">DISABLED</span><?php endif; ?>
-          <span class="hint mono"><?php echo e((string) $router['host']); ?>:<?php echo (int) $router['api_port']; ?></span>
-        </div>
-      <?php endif; ?>
-    </form>
-  </div>
-</div>
+
 
 <?php if ($banner !== ''): ?>
   <div class="flash flash--<?php echo e($bannerType); ?>" style="margin-bottom:20px">
@@ -360,10 +327,8 @@ aircoins_header('Hotspot', 'hotspot');
   <div class="card"><div class="card__body">
     <div class="empty">
       <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 0 0-9 9h2a7 7 0 1 1 14 0h2a9 9 0 0 0-9-9Zm0 13a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>
-      <div><?php echo $routerList === [] ? 'No routers configured yet' : 'Select a router to begin'; ?></div>
-      <?php if ($routerList === []): ?>
-        <a class="btn btn--primary" href="routers.php?add=1" style="margin-top:14px">Add router</a>
-      <?php endif; ?>
+      <div>No router selected. Use the <strong>Router</strong> dropdown in the top bar.</div>
+      <a class="btn btn--primary" href="routers.php" style="margin-top:14px">Manage routers</a>
     </div>
   </div></div>
 <?php else: ?>
@@ -406,7 +371,6 @@ aircoins_header('Hotspot', 'hotspot');
           <form method="post" action="hotspot.php" autocomplete="off">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="action" value="add_user">
-            <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
             <div class="field">
               <label for="u-name">Username</label>
               <input class="input" id="u-name" name="name" type="text" required>
@@ -456,7 +420,6 @@ aircoins_header('Hotspot', 'hotspot');
           <form method="post" action="hotspot.php" data-voucher-form autocomplete="off">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="action" value="generate">
-            <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
             <div class="form-grid">
               <div class="field">
                 <label for="v-prefix">Prefix</label>
@@ -556,7 +519,6 @@ aircoins_header('Hotspot', 'hotspot');
                     <form method="post" action="hotspot.php" style="display:inline">
                       <?php echo csrf_field(); ?>
                       <input type="hidden" name="action" value="delete_user">
-                      <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
                       <input type="hidden" name="id" value="<?php echo e((string) ($u['.id'] ?? '')); ?>">
                       <input type="hidden" name="name" value="<?php echo e((string) ($u['name'] ?? '')); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"
@@ -601,7 +563,6 @@ aircoins_header('Hotspot', 'hotspot');
                     <form method="post" action="hotspot.php" style="display:inline">
                       <?php echo csrf_field(); ?>
                       <input type="hidden" name="action" value="kick">
-                      <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
                       <input type="hidden" name="id" value="<?php echo e((string) ($s['.id'] ?? '')); ?>">
                       <input type="hidden" name="user" value="<?php echo e((string) ($s['user'] ?? '')); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"
@@ -629,7 +590,6 @@ aircoins_header('Hotspot', 'hotspot');
           <form method="post" action="hotspot.php" autocomplete="off">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="action" value="add_profile">
-            <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
             <div class="field">
               <label for="p-name">Profile name</label>
               <input class="input" id="p-name" name="profile_name" type="text" required placeholder="e.g. 1hr-voucher">
@@ -709,7 +669,6 @@ aircoins_header('Hotspot', 'hotspot');
                     <form method="post" action="hotspot.php" style="display:inline">
                       <?php echo csrf_field(); ?>
                       <input type="hidden" name="action" value="delete_profile">
-                      <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
                       <input type="hidden" name="id" value="<?php echo e((string) ($p['.id'] ?? '')); ?>">
                       <input type="hidden" name="name" value="<?php echo e((string) ($p['name'] ?? '')); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"

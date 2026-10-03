@@ -109,9 +109,10 @@ const AIRCOINS_STUBS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Load routers for the selector
+// Session-selected router (from global topbar selector)
 // ---------------------------------------------------------------------------
-$routers = $pdo->query('SELECT * FROM routers WHERE disabled = 0 ORDER BY name COLLATE NOCASE ASC')->fetchAll(PDO::FETCH_ASSOC);
+$router   = aircoins_selected_router($pdo);
+$routerId = $router ? (int) $router['id'] : 0;
 
 // ---------------------------------------------------------------------------
 // POST handlers
@@ -123,13 +124,6 @@ $fixed  = null;   // fix result
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action   = (string) ($_POST['action'] ?? '');
-    $routerId = (int) ($_POST['router_id'] ?? 0);
-
-    // Resolve the chosen router
-    $router = null;
-    foreach ($routers as $r) {
-        if ((int) $r['id'] === $routerId) { $router = $r; break; }
-    }
 
     if ($action === 'diagnose' && $router !== null) {
         try {
@@ -231,34 +225,28 @@ aircoins_header('Tools', 'tools');
       <?php echo csrf_field(); ?>
       <input type="hidden" name="action" id="toolsAction" value="">
 
-      <div class="form-grid">
-        <div class="field">
-          <label for="t-router">Router</label>
-          <select class="select" id="t-router" name="router_id" required>
-            <option value="">— select a router —</option>
-            <?php foreach ($routers as $r): ?>
-              <option value="<?php echo (int) $r['id']; ?>"><?php echo e((string) $r['name']); ?> (<?php echo e((string) $r['host']); ?>)</option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="field">
-          <label for="t-sbcip">SBC Panel IP</label>
-          <input class="input input--mono" id="t-sbcip" name="sbc_ip" type="text"
-                 placeholder="e.g. 10.0.0.252"
-                 pattern="^\d{1,3}(\.\d{1,3}){3}$"
-                 value="<?php echo e($_POST['sbc_ip'] ?? ''); ?>">
-          <p class="hint">The IP of this panel — substituted into the stub redirect URLs.</p>
-        </div>
+      <?php if (!$router): ?>
+        <p class="hint" style="color:var(--bad)">Select a router from the top bar first.</p>
+      <?php else: ?>
+        <p class="hint" style="margin-bottom:12px">Router: <strong><?php echo e((string) $router['name']); ?></strong> (<?php echo e((string) $router['host']); ?>)</p>
+      <?php endif; ?>
+      <div class="field">
+        <label for="t-sbcip">SBC Panel IP</label>
+        <input class="input input--mono" id="t-sbcip" name="sbc_ip" type="text"
+               placeholder="e.g. 10.0.0.252"
+               pattern="^\d{1,3}(\.\d{1,3}){3}$"
+               value="<?php echo e($_POST['sbc_ip'] ?? ''); ?>">
+        <p class="hint">The IP of this panel — substituted into the stub redirect URLs.</p>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:12px">
         <button class="btn btn--primary" type="submit" name="act" value="diagnose"
-                onclick="document.getElementById('toolsAction').value='diagnose'">
+                onclick="document.getElementById('toolsAction').value='diagnose'" <?php echo !$router ? 'disabled' : ''; ?>>
           Diagnose
         </button>
         <button class="btn btn--danger" type="submit" name="act" value="fix"
                 onclick="document.getElementById('toolsAction').value='fix'"
-                data-confirm="This will overwrite login.html, alogin.html, error.html and logout.html on the router. Continue?">
+                data-confirm="This will overwrite login.html, alogin.html, error.html and logout.html on the router. Continue?" <?php echo !$router ? 'disabled' : ''; ?>>
           Fix — Upload Stubs
         </button>
       </div>

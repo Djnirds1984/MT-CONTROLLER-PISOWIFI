@@ -143,7 +143,7 @@ aircoins_header('Dashboard', 'dashboard');
             <?php endif; ?>
           </span>
           <div class="topbar__spacer" style="flex:1"></div>
-          <a class="btn btn--ghost btn--sm" href="hotspot.php?router=<?php echo $rid; ?>">Hotspot</a>
+          <a class="btn btn--ghost btn--sm" href="set_router.php?id=<?php echo $rid; ?>&redirect=hotspot.php">Hotspot</a>
         </div>
       </article>
     <?php endforeach; ?>

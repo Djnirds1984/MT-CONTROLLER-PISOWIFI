@@ -94,3 +94,54 @@ function aircoins_get_router(PDO $pdo, int $id): ?array
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
 }
+
+/**
+ * Get the currently selected router id from the session.
+ *
+ * @return int Router id (0 when none selected).
+ */
+function aircoins_selected_router_id(): int
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return 0;
+    }
+    return (int) ($_SESSION['selected_router_id'] ?? 0);
+}
+
+/**
+ * Resolve the full router row for the currently selected router.
+ *
+ * @param PDO $pdo Database connection.
+ * @return array|null The router row, or null when none selected or not found.
+ */
+function aircoins_selected_router(PDO $pdo): ?array
+{
+    $id = aircoins_selected_router_id();
+    if ($id <= 0) {
+        return null;
+    }
+    $router = aircoins_get_router($pdo, $id);
+    // Clear stale selection if the router was deleted or disabled.
+    if ($router === null || (int) ($router['disabled'] ?? 0) === 1) {
+        unset($_SESSION['selected_router_id']);
+        return null;
+    }
+    return $router;
+}
+
+/**
+ * Persist the selected router id in the session.
+ *
+ * @param int $id Router id (0 to clear).
+ */
+function aircoins_set_selected_router(int $id): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        aircoins_session_start();
+    }
+    if ($id <= 0) {
+        unset($_SESSION['selected_router_id']);
+    } else {
+        $_SESSION['selected_router_id'] = $id;
+    }
+}

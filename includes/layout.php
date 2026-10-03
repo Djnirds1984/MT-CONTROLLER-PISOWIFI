@@ -16,6 +16,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/db.php';
 
 /**
  * Queue a one-shot flash message for the next rendered page.
@@ -136,6 +137,23 @@ function aircoins_header(string $title, string $active = ''): void
       </button>
       <h1 class="topbar__title"><?php echo e($title); ?></h1>
       <div class="topbar__spacer"></div>
+      <?php
+      // Global router selector — available on every admin page.
+      $_rl = [];
+      try { $_rl = aircoins_db()->query('SELECT id, name, host, api_type FROM routers WHERE disabled = 0 ORDER BY name COLLATE NOCASE ASC')->fetchAll(); } catch (Throwable $_e) {}
+      $_selId = aircoins_selected_router_id();
+      ?>
+      <form method="get" action="set_router.php" class="topbar__router-sel" id="routerSwitchForm">
+        <label class="topbar__router-label" for="topRouter">Router</label>
+        <select class="select" id="topRouter" name="id" onchange="this.form.submit()" style="min-width:180px">
+          <option value="0">— select router —</option>
+          <?php foreach ($_rl as $_r): ?>
+            <option value="<?php echo (int) $_r['id']; ?>" <?php echo $_selId === (int) $_r['id'] ? 'selected' : ''; ?>>
+              <?php echo e((string) $_r['name'] . ' (' . $_r['host'] . ')'); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </form>
       <div class="topbar__user">
         <span class="avatar" aria-hidden="true"><?php echo e($initial); ?></span>
         <span class="topbar__name"><?php echo e($user); ?></span>
