@@ -363,12 +363,17 @@
 		var loginError = "";
 
         function doLogin() {
-			/* Voucher login: use the same CHAP flow as member login.
-			   The voucher code is both username and password.
+			/* Voucher / device-MAC login.
 			   When the voucher input is empty, auto-use the device MAC
-			   (without colons, UPPERCASE) as both username and password
-			   so devices with admin-set session time can authenticate
-			   by just pressing SUBMIT. */
+			   (without colons) as both username and password so devices
+			   with admin-set session time can authenticate by pressing
+			   SUBMIT only.
+			   In EXTERNAL mode (SBC portal) the CHAP tokens are literal
+			   strings, so we submit PLAINTEXT credentials through the
+			   member login form whose action varbridge.js already patched
+			   to the router's real login URL.
+			   In ROUTER-NATIVE mode the CHAP tokens are real values, so
+			   we use the hidden sendin form with the CHAP hash. */
 			var vc = document.getElementById('voucherInput') ? document.getElementById('voucherInput').value : '';
 			if (vc === '') {
 				vc = replaceAll(mac, ":");
@@ -399,6 +404,21 @@
 				}
 				
 			}
+
+			if (window.PORTAL && window.PORTAL.external) {
+				/* External / SBC mode: CHAP tokens are literal garbage.
+				   Submit plaintext credentials through the member login
+				   form (its action was patched by varbridge.js). */
+				var loginForm = document.forms['login'];
+				if (loginForm) {
+					loginForm.username.value = vc;
+					loginForm.password.value = vc;
+					loginForm.submit();
+				}
+				return false;
+			}
+
+			/* Router-native mode: CHAP tokens are real values. */
             document.sendin.username.value = vc;
 			if(loginOption == 0){
 				document.sendin.password.value = hexMD5('$(chap-id)' + "" + '$(chap-challenge)');
