@@ -94,6 +94,7 @@ Ubuntu 24.04.
 ### Operating system
 * Debian 12 (bookworm) → PHP **8.2**, Ubuntu 24.04 (noble) → PHP **8.3**, or Armbian based on either.
 * Root/sudo access. `systemd`.
+* `git` (to clone the repository onto the SBC: `sudo apt-get install -y git`) — or use `scp` from another machine.
 
 ### Network / addressing (defaults used in this guide)
 | Role | Default | Notes |
@@ -116,10 +117,11 @@ Ubuntu 24.04.
 
 ### 5.1 One-shot installer (recommended)
 
-Copy the repository to the SBC (scp/git), then run:
+Get the repository onto the SBC (git clone, or scp it from another machine), then run:
 
 ```bash
-cd /path/to/MT-CONTROLLER-PISOWIFI
+git clone https://github.com/Djnirds1984/MT-CONTROLLER-PISOWIFI.git
+cd MT-CONTROLLER-PISOWIFI
 sudo bash deploy/scripts/install-sbc.sh            # source repo = ../.. by default
 # or point at a repo explicitly:
 sudo bash deploy/scripts/install-sbc.sh /path/to/MT-CONTROLLER-PISOWIFI
