@@ -71,6 +71,9 @@ static const uint8_t VOUCHER_LEN     = 6;
 // Coin pulse debounce (ms)
 static const uint16_t COIN_DEBOUNCE_MS = 150;
 
+// Minutes of internet time granted per coin pulse
+static const uint16_t MINUTES_PER_PULSE = 15;
+
 // HTTP server port
 static const uint16_t HTTP_PORT = 80;
 
@@ -101,12 +104,9 @@ String pendingVoucher;
 String pendingMac;
 uint32_t voucherGeneratedAtMs = 0;
 
-// Promo rates (pipe-delimited: code|name|price|group|hash)
-static const char* PROMO_RATES =
-  "RATE1|1 Hour|5.00|Time|hash1\n"
-  "RATE2|2 Hours|10.00|Time|hash2\n"
-  "RATE3|1 Day|25.00|Time|hash3\n"
-  "RATE4|1 Week|100.00|Time|hash4\n";
+// Promo rates — built at runtime from MINUTES_PER_PULSE
+// Format per line: coins#name#label#minutes#data_mb  (lines separated by \n)
+String promoRatesStr = "";
 
 /* ============================================================
  * 3. FORWARD DECLARATIONS
@@ -507,7 +507,7 @@ void handleDataFile() {
 }
 
 void handleGetRates() {
-  server.send(200, "text/plain", PROMO_RATES);
+  server.send(200, "text/plain", promoRatesStr);
 }
 
 /**
@@ -551,8 +551,8 @@ void handleCheckCoin() {
                   "\"totalCoin\":" + String(coinTotal) + ","
                   "\"newCoin\":" + String(newPulses) + ","
                   "\"voucher\":\"" + jsonEscape(code) + "\","
-                  "\"timeAdded\":\"" + String(newPulses * 600) + "\","
-                  "\"data\":\"" + String(newPulses * 100) + "\"}";
+                  "\"timeAdded\":\"" + String((uint32_t)newPulses * MINUTES_PER_PULSE * 60) + "\","
+                  "\"data\":\"0\"}";
     server.send(200, "application/json", json);
     return;
   }
@@ -562,8 +562,8 @@ void handleCheckCoin() {
                 "\"totalCoin\":" + String(coinTotal) + ","
                 "\"newCoin\":0,"
                 "\"voucher\":\"" + jsonEscape(pendingVoucher) + "\","
-                "\"timeAdded\":\"" + String(coinTotal * 600) + "\","
-                "\"data\":\"" + String(coinTotal * 100) + "\"}";
+                "\"timeAdded\":\"" + String((uint32_t)coinTotal * MINUTES_PER_PULSE * 60) + "\","
+                "\"data\":\"0\"}";
   server.send(200, "application/json", json);
 }
 
@@ -679,6 +679,15 @@ void setup() {
   delay(500);
   Serial.println();
   Serial.println("=== AIRCOINS NETFI Vendo Firmware v2 ===");
+
+  // Build promo rates string from MINUTES_PER_PULSE
+  // Format: name#col1#col2#minutes#data_mb  rows separated by |
+  // Portal parses: columns[0]=name, columns[3]=minutes, columns[4]=data_mb
+  promoRatesStr = "";
+  promoRatesStr += "1 Coin###" + String(MINUTES_PER_PULSE) + "#";
+  promoRatesStr += "|3 Coins###" + String(MINUTES_PER_PULSE * 3) + "#";
+  promoRatesStr += "|5 Coins###" + String(MINUTES_PER_PULSE * 5) + "#";
+  promoRatesStr += "|10 Coins###" + String(MINUTES_PER_PULSE * 10) + "#";
 
   // LED
   pinMode(PIN_LED, OUTPUT);

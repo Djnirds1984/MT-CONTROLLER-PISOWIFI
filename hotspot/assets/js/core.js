@@ -50,7 +50,7 @@ function fetchVendoDevices(){
 
 			for(var i = 0; i < devices.length; i++){
 				var d = devices[i];
-				var label = d.name + ' (\u20B1' + parseFloat(d.rate_per_pulse).toFixed(2) + '/pulse)';
+				var label = d.name + ' (' + parseInt(d.minutes_per_pulse) + ' min/pulse)';
 				$("#vendoSelected").append($('<option>', {
 					value: d.ip,
 					text: label
@@ -63,7 +63,7 @@ function fetchVendoDevices(){
 					eloadEnable: false,
 					coinPin: d.coin_pin,
 					debounceMs: d.debounce_ms,
-					ratePerPulse: parseFloat(d.rate_per_pulse)
+					minutesPerPulse: parseInt(d.minutes_per_pulse)
 				});
 			}
 
@@ -875,7 +875,7 @@ function notifyCoinSlotError(errorCode){
 function notifyCoinSuccess(coin){
 	$.toast({
 	  title: 'Coin inserted',
-	  content: coin+' peso(s) was inserted',
+	  content: coin+' coin(s) inserted',
 	  type: 'success',
 	  delay: 2000
 	});

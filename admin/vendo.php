@@ -11,7 +11,7 @@
  *   - Device name (shown in the portal dropdown)
  *   - Coin pin (GPIO where the coin acceptor is connected)
  *   - Debounce (ms) — pulse debounce guard
- *   - Rate per pulse (₱) — pricing per coin pulse
+ *   - Minutes per pulse — time granted per coin pulse (e.g. 15 = 15 min/pulse)
  */
 
 declare(strict_types=1);
@@ -43,23 +43,23 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $deviceName   = trim((string) ($_POST['device_name'] ?? ''));
         $coinPin      = (int) ($_POST['coin_pin'] ?? 4);
         $debounceMs   = (int) ($_POST['debounce_ms'] ?? 150);
-        $ratePerPulse = (float) ($_POST['rate_per_pulse'] ?? 1.00);
+        $minutesPerPulse = (int) ($_POST['minutes_per_pulse'] ?? 15);
 
         // Validate ranges.
         if ($coinPin < 0 || $coinPin > 16) $coinPin = 4;
         if ($debounceMs < 10 || $debounceMs > 5000) $debounceMs = 150;
-        if ($ratePerPulse < 0.01) $ratePerPulse = 1.00;
+        if ($minutesPerPulse < 1) $minutesPerPulse = 15;
 
         try {
             $upd = $pdo->prepare(
                 'UPDATE vendo_devices SET device_name = :dn, coin_pin = :cp, '
-                . 'debounce_ms = :db, rate_per_pulse = :rp WHERE id = :id'
+                . 'debounce_ms = :db, minutes_per_pulse = :mp WHERE id = :id'
             );
             $upd->execute([
                 ':dn' => $deviceName,
                 ':cp' => $coinPin,
                 ':db' => $debounceMs,
-                ':rp' => $ratePerPulse,
+                ':mp' => $minutesPerPulse,
                 ':id' => $vendoId,
             ]);
             aircoins_flash('success', 'Settings saved for vendo #' . $vendoId . '.');
@@ -318,7 +318,7 @@ aircoins_header('Vendo Setup', 'vendo');
 <div class="card">
   <div class="card__head">
     <h2 class="card__title">Accepted Vendo Devices</h2>
-    <span class="card__sub">Each card represents a coin-slot node — configure pin, debounce, and rate per pulse</span>
+    <span class="card__sub">Each card represents a coin-slot node — configure pin, debounce, and minutes per pulse</span>
   </div>
   <div class="card__body">
     <?php if ($accepted === []): ?>
@@ -336,7 +336,7 @@ aircoins_header('Vendo Setup', 'vendo');
             $aMac  = (string) $a['mac_address'];
             $aPin  = (int) ($a['coin_pin'] ?? 4);
             $aDb   = (int) ($a['debounce_ms'] ?? 150);
-            $aRate = (float) ($a['rate_per_pulse'] ?? 1.00);
+            $aMin = (int) ($a['minutes_per_pulse'] ?? 15);
           ?>
           <div style="border:2px solid #e0e0e0; border-radius:12px; padding:16px; background:#fafafa;">
             <!-- Header: name + IP -->
@@ -380,9 +380,10 @@ aircoins_header('Vendo Setup', 'vendo');
                 </div>
               </div>
 
-              <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin:8px 0 3px;">Rate per Pulse (₱)</label>
-              <input type="number" name="rate_per_pulse" value="<?php echo number_format($aRate, 2, '.', ''); ?>" min="0.01" step="0.25"
-                     style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:12px; box-sizing:border-box;">
+              <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin:8px 0 3px;">Minutes per Pulse</label>
+              <input type="number" name="minutes_per_pulse" value="<?php echo $aMin; ?>" min="1" max="1440" step="1"
+                     style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:4px; box-sizing:border-box;">
+              <small style="color:#888; font-size:11px;">Each coin = this many minutes of internet time</small>
 
               <div style="display:flex; gap:8px;">
                 <button type="submit" class="btn btn--primary btn--sm" style="flex:1;">Save Settings</button>

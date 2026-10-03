@@ -9,7 +9,7 @@
  *
  * Contract:
  *   GET /api/vendo.php
- *   200 {devices:[{id, name, ip, mac, coin_pin, debounce_ms, rate_per_pulse}, ...]}
+ *   200 {devices:[{id, name, ip, mac, coin_pin, debounce_ms, minutes_per_pulse}, ...]}
  *   200 {devices:[]}   when no accepted vendos exist
  *
  * CORS is opened for THIS endpoint only (same rationale as session.php).
@@ -32,7 +32,7 @@ try {
 
     $stmt = $pdo->query(
         "SELECT id, mac_address, assigned_ip, ip_address, hostname, device_name, "
-        . "coin_pin, debounce_ms, rate_per_pulse "
+        . "coin_pin, debounce_ms, minutes_per_pulse "
         . "FROM vendo_devices WHERE status = 'accepted' ORDER BY device_name ASC, id ASC"
     );
     $rows = $stmt ? $stmt->fetchAll() : [];
@@ -54,7 +54,7 @@ try {
             'mac'             => (string) $r['mac_address'],
             'coin_pin'        => (int) ($r['coin_pin'] ?? 4),
             'debounce_ms'     => (int) ($r['debounce_ms'] ?? 150),
-            'rate_per_pulse'  => (float) ($r['rate_per_pulse'] ?? 1.00),
+            'minutes_per_pulse' => (int) ($r['minutes_per_pulse'] ?? 15),
         ];
     }
 

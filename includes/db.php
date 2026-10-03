@@ -156,10 +156,10 @@ CREATE TABLE IF NOT EXISTS vendo_devices (
     router_id      INTEGER,
     status         TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','disabled')),
     assigned_ip    TEXT,
-    coin_pin       INTEGER DEFAULT 4,
-    debounce_ms    INTEGER DEFAULT 150,
-    rate_per_pulse REAL    DEFAULT 1.00,
-    device_name    TEXT,
+    coin_pin          INTEGER DEFAULT 4,
+    debounce_ms       INTEGER DEFAULT 150,
+    minutes_per_pulse INTEGER DEFAULT 15,
+    device_name       TEXT,
     accepted_at    INTEGER,
     last_seen      INTEGER,
     created_at     INTEGER
@@ -181,7 +181,7 @@ SQL);
     $migrations = [
         'coin_pin'       => "ALTER TABLE vendo_devices ADD COLUMN coin_pin INTEGER DEFAULT 4",
         'debounce_ms'    => "ALTER TABLE vendo_devices ADD COLUMN debounce_ms INTEGER DEFAULT 150",
-        'rate_per_pulse' => "ALTER TABLE vendo_devices ADD COLUMN rate_per_pulse REAL DEFAULT 1.00",
+        'minutes_per_pulse' => "ALTER TABLE vendo_devices ADD COLUMN minutes_per_pulse INTEGER DEFAULT 15",
         'device_name'    => "ALTER TABLE vendo_devices ADD COLUMN device_name TEXT DEFAULT ''",
     ];
     foreach ($migrations as $colName => $ddl) {
