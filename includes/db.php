@@ -113,4 +113,37 @@ SQL);
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_ts ON login_attempts (ip, attempted_at)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_monitor_samples_router_iface_ts ON monitor_samples (router_id, iface, ts)');
+
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS devices (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac_address  TEXT NOT NULL,
+    ip_address   TEXT,
+    hostname     TEXT,
+    user         TEXT,
+    router_id    INTEGER,
+    session_time TEXT,
+    status       TEXT DEFAULT 'active' CHECK(status IN ('active','expired','blocked')),
+    first_seen   INTEGER,
+    last_seen    INTEGER,
+    created_at   INTEGER,
+    updated_at   INTEGER
+)
+SQL);
+
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mac ON devices (mac_address)');
+
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS voucher_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    code       TEXT NOT NULL,
+    mac        TEXT,
+    ip         TEXT,
+    router_id  INTEGER,
+    used_at    INTEGER,
+    expires_at INTEGER
+)
+SQL);
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_voucher_log_code ON voucher_log (code)');
 }
