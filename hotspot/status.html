@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+	<link rel="stylesheet" href="assets/css/toast.min.css">
+	<link rel="stylesheet" href="assets/css/core.css">
+	<link rel="stylesheet" href="assets/css/JuanFi.css">
+    <title>AIRCOINS NETFI - Status</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<!-- Dual-mode bridge: no-op when router-served, patches $(var) tokens + publishes window.PORTAL when served by the SBC. Must load first. -->
+	<script src="js/varbridge.js"></script>
+	<script src="assets/js/config.js"></script>
+	<script src="assets/js/pako.min.js"></script>
+	<script>
+		var loginError = "";
+		var mac = "$(mac)";
+		var logoutUrl = "$(link-logout)";
+		var hotspotAddress = "$(server-address)"; 
+		var interfaceName = "$(interface-name)";
+		var remainingTimer = null;
+	</script>
+
+</head>
+<body id="loginBody">
+
+<!-- Messenger Chat plugin Code -->
+    <div id="fb-root"></div>
+
+    <!-- Your Chat plugin code -->
+    <div id="fb-customer-chat" class="fb-customerchat">
+    </div>
+
+    <script>
+      var chatbox = document.getElementById('fb-customer-chat');
+      chatbox.setAttribute("page_id", "108240834062058");
+      chatbox.setAttribute("attribution", "biz_inbox");
+
+      window.fbAsyncInit = function() {
+        FB.init({
+          xfbml            : true,
+          version          : 'v12.0'
+        });
+      };
+
+      (function(d, s, id) {
+        var js, fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) return;
+        js = d.createElement(s); js.id = id;
+        js.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
+        fjs.parentNode.insertBefore(js, fjs);
+      }(document, 'script', 'facebook-jssdk'));
+    </script>
+
+<div class="container">
+<center>
+		<form action="$(link-logout)" name="logout" >
+		</form>
+
+		<form action="$(link-logout)" name="forcelogout" >
+			<input type="hidden" name="erase-cookie" value="true" />
+		</form>
+		
+        <div class="row">
+            <div class="col-sm-5">
+                <div class="row" style="margin-bottom: 20px">
+                    <img src="assets/MainPic.PNG" class="img-fluid" />
+                </div>
+				
+				<div class="info"><center>
+						<div class="info-ip">
+						<img src="assets/img/ip.png" width="20px" height="20px" />
+						<span>$(ip)</span>
+						</div>
+						<div class="info-mac">
+						<img src="assets/img/mac.png" width="20px" height="20px" />
+						<span>$(mac)</span>
+						</div>
+					</center>
+				</div>
+				
+				<center>			
+				<span class="status-connected">Status: <span class="blinking2" id="connectionStatus" style="color: #4cd137">Connected</span></span>
+                </center>
+            </div>
+
+            <div class="col-sm-7">
+                <div class="login">
+				
+				
+				
+				<div class="info-status">
+				<center>
+					<div class="status-holder">
+						<div class="info-title"><img src="assets/img/voucher.png" width="20px" height="20px" /><span> Voucher</span></div>
+						<span style="font-size: 25px; font-weight: bold; text-shadow: 1px 1px 3px #000" id="extUsername">$(username)</span>
+					</div>
+					
+					<div class="break2"></div>
+					
+					<div class="status-holder">						
+						<div class="info-title"><img src="assets/img/time.png" width="20px" height="20px" /><span> Remaining Time</span></div>
+						<span class="odometer" id="remainTime" style="font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000"></span><br>
+						
+					</div>
+					
+					<div class="break2"></div>
+					
+					<div class="status-holder">					
+						<div class="info-title"><img src="assets/img/timeexpired.png" width="20px" height="20px" /><span> Expiration Time</span></div>
+						<span id="expirationTime" style="font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000"></span>
+					</div>
+					
+					<div class="break2"></div>
+					
+					<div class="status-holder">
+						<div class="info-title"><img src="assets/img/data.png" width="20px" height="20px" /><span> Data Usage</span></div>
+						<div style="display: inline-block"><img src="assets/img/upload.png" width="20px" height="20px" /><span style="font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000" id="extBytesIn">$(bytes-in-nice)</span></div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+						<div style="display: inline-block"><img src="assets/img/download.png" width="20px" height="20px" /><span style="font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000" id="extBytesOut">$(bytes-out-nice)</span></div>
+						<div class="inscoinholder" id="dataInfoDiv2">
+							<span id="totalDataInfo" style="font-size: 20px; font-weight: bold; color: #ffffff">$(remain-bytes-total-nice)</span><br>
+							<span style="color: #ffffff">Remaining Data</span>
+						</div>
+					</div>
+					
+					<!-- External-mode only: live uptime from /api/session.php (kept hidden when router-served) -->
+					<div class="break2" id="extUptimeBreak" style="display:none"></div>
+					<div class="status-holder" id="extUptimeHolder" style="display:none">
+						<div class="info-title"><img src="assets/img/time.png" width="20px" height="20px" /><span> Uptime</span></div>
+						<span id="extUptime" style="font-size: 16px; font-weight: bold; text-shadow: 1px 1px 3px #000"></span>
+					</div>
+				</center>
+				</div>
+					
+					<div id="vendoSelectDiv" style="margin-top: 20px">
+						<label for="exampleFormControlSelect2">Select Vendo</label>
+						<select class="form-control" name="vendoSelected" id="vendoSelected" >
+						</select>
+					</div>
+					<br>
+				
+					<button type="button" id="insertBtn" onclick="insertBtnAction(); return false" class="btn btn-success btn-block" data-insert-type="extend" data-toggle="modal" style="display: block; width: 100%; color: #fff; text-shadow: 0px 1px 2px #000;">EXTEND TIME</button>
+					<div style="margin-bottom:-5px"></div>
+					<br>
+					<button type="button" id="promoRateBtn" onclick="promoBtnAction(); return false" class="btn btn-warning" style="display: block; width: 100%; color: #fff; text-shadow: 0px 1px 2px #000;">PROMO RATES</button>
+					<div style="margin-bottom:-5px"></div>
+					<br>
+					<button type="button" id="pauseTimeBtn" onClick="pause(); return false" class="btn btn-danger btn-block" style="display: block; width: 100%; color: #fff; text-shadow: 0px 1px 2px #000;">PAUSE TIME</button>
+					<br>
+					<button type="button" id="chargingBtn" onclick="chargingBtnAction(); return false" class="btn btn-secondary" style="display: block; width: 100%; color: #fff; text-shadow: 0px 1px 2px #000;">CHARGING STATION</button>
+					<br>
+					<button type="button" id="eloadBtn" onclick="eloadBtnAction(); return false" class="btn btn-info" style="display: block; width: 100%; color: #fff; text-shadow: 0px 1px 2px #000;">E-LOAD</button>
+					<div style="margin-top: 18px"></div>
+			
+					<div class="modal fade" id="insertCoinModal" style="z-index: 1500" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="insertCoinModalTitle" aria-hidden="true">
+						<div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+						  <div class="modal-content">
+							<div class="modal-header">
+							  <h5 class="modal-title" id="insertCoinModalTitle">Please insert the coin</h5>
+							  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+								<span aria-hidden="true">&times;</span>
+							  </button>
+							</div>
+							<div class="modal-body">
+								  <div class="progress" style="margin-bottom: 20px">
+									  <div id="progressDiv" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" style="width: 100%; height: 30px"></div>
+								  </div>
+  
+								  <div id="noticeDiv" style="display: none">
+									  <center>
+										  <h4 id="noticeText">Coin is reading, please wait</h4>
+									  </center>
+								  </div>
+								  
+								  <div class="inscoin">
+								  <center>
+								  <div class="inscoinholder" style="border: 2px solid #576574; padding: 5px; height: 90px; border-radius: 3px">
+								  <span style="color: #747d8c">Your code is</span><br>
+								  <span id="codeGeneratedBlock">
+									  <span id="codeGenerated" style="font-size: 35px; font-weight: bold; color: #4cd137">*****</span>
+								  </span>
+								  </div>
+  
+								  <div class="inscoinholder convertVoucherBlock" id="convertVoucherBlockDiv">
+									  <span style="color: #747d8c">Convert unsed voucher</span><br>
+								  <input type="text" class="form-control" id="convertVoucherCode" placeholder="Enter voucher" style="width: 140px; text-align: center; ">
+								  <br>
+								  <button type="button" id="convertBtn" class="btn btn-success" onclick="convertVoucherAction(); return false">Convert</button>
+								  </div>
+								  
+								  <div class="inscoinholder">
+								  <span id="totalCoin" style="font-size: 20px; font-weight: bold; color: #fff">0</span><span style="font-size: 20px; font-weight: bold; color: #fff">.00 Php</span><br>
+								  <span style="color: #747d8c">Coin</span>
+								  </div>
+								  
+								  <div class="inscoinholder" id="totalTimeDiv">
+								  <span id="totalTime" style="font-size: 20px; font-weight: bold; color: #fff"></span><br>
+								  <span style="color: #747d8c">Time: </span>
+								  </div>
+								  
+								  <div class="inscoinholder" id="expectedCoinDiv" style="display: none">
+								  <span id="expectedCoin" style="font-size: 20px; font-weight: bold; color: #fff"></span><br>
+								  <span style="color: #747d8c">Expected Coin </span>
+								  </div>
+								  
+								  </center>
+								  </div>
+								  
+								  
+								  
+							</div>
+							<div class="modal-footer">
+							  <button type="button" id="saveVoucherButton" data-save-type="extend" onclick="saveVoucherBtnAction(); return false" class="btn btn-primary" data-dismiss="modal">
+								Done
+							  </button>
+							  <button type="button" id="cncl" class="btn btn-danger" data-dismiss="modal">Cancel</button>
+							</div>
+						  </div>
+						</div>
+					  </div>
+					
+					<div class="modal fade" id="promoRatesModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+					  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+						<div class="modal-content">
+						  <div class="modal-header">
+							<h5 class="modal-title" id="exampleModalLabel">Promo Rates</h5>
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							  <span aria-hidden="true" style="color: #fff">&times;</span>
+							</button>
+						  </div>
+						  <div class="modal-body">
+							<center>
+								<div id="rateTypeDiv">
+								<label for="rateType" class="rate-title"><b>Rate Type</b></label>
+								<select name="rateType" class="form-control" id="rateType" onChange="onRateTypeChange(this)">
+								  <option value="1">Internet</option>
+								  <option value="2">Charging</option>
+								</select>
+								</div>
+							</center>
+							<br/>
+							<center>	
+							<div id="ratesBody"></div>
+							<div id="totalTime"></div>							
+							</center>
+						  </div>
+						  <div class="modal-footer">
+							<button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+						  </div>
+						</div>
+					  </div>
+					</div>
+					
+					<div class="modal fade" id="chargingModal" tabindex="1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+					  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+						<div class="modal-content">
+						  <div class="modal-header">
+							<h5 class="modal-title" id="exampleModalLabel">Charging Station</h5>
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							  <span aria-hidden="true" style="color: #fff">&times;</span>
+							</button>
+						  </div>
+						  <div class="modal-body">
+							<center>	
+							<div id="chargingBody"></div>
+							</center>
+						  </div>
+						  <div class="modal-footer">
+							<button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+						  </div>
+						</div>
+					  </div>
+					</div>
+					
+					<div class="modal fade" id="eloadModal" tabindex="1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+					  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+						<div class="modal-content">
+						  <div class="modal-header">
+							<h5 class="modal-title" id="exampleModalLabel">E-LOAD</h5>
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							  <span aria-hidden="true" style="color: #fff">&times;</span>
+							</button>
+						  </div>
+						  <div class="modal-body">
+							<center>	
+							<div id="eloadingBody">
+								<h4 id="eloadConfirm" style="display: none"><span style="color: #2e86de; text-shadow: 1px 2px 3px #000">CONFIRM YOUR SELECTED DETAILS</span></h4>
+								<div id="mobileNumDiv" class="input-bottom-space-20px">
+									<label for="exampleFormControlSelect2">Mobile #</label>
+									<input type="number" class="form-control" id="mobileNo" aria-describedby="mobileNo"  pattern="\d*" maxlength="11" placeholder="Enter mobile number (Ex: 09182392234)" required>
+								</div>
+								<div id="loadTypeDiv" style="display: none" class="input-bottom-space-20px">
+									<label for="exampleFormControlSelect2" >Select Load Type</label>
+									<select class="form-control" name="loadType" onChange="loadTypeChanged(this)" id="loadTypeSelected" >
+									</select>
+								</div>
+								<div id="productTypeDiv" style="display: none" class="input-bottom-space-20px">
+									<label for="exampleFormControlSelect2">Select Product</label>
+									<select class="form-control input-bottom-space-20px" name="productType" id="productTypeSelected" onChange="productTypeChanged(this)">
+									</select>
+									<label for="exampleFormControlSelect2">Price (PHP)</label>
+									<input type="text" class="form-control" id="price" aria-describedby="mobileNo" disabled>
+								</div>
+								<br/>
+								<h5 id="eloadConfirm2" style="display: none;" class="input-bottom-space-20px"><span style="color: #2e86de; text-shadow: 1px 2px 3px #000">Please make sure to insert the exact amount <ul style="
+									font-size: medium;
+									color: white;
+									text-align: left;
+								"><li>In case theres an excess amount or amount is insufficient, it will be converted to a voucher code and you can use it for your next e-Loading or you can use it on internet service.</li></ul></span></h5>
+							</div>
+							</center>
+						  </div>
+						  <div class="modal-footer">
+							<button type="button" id="buyEloadPrevBtn" class="btn btn-danger" onclick="buyEloadPrevAction(); return false">Close</button>
+						    <button type="button" id="buyEloadBtn" onclick="buyEloadAction(); return false" class="btn btn-success">Next</button>
+						  </div>
+						</div>
+					  </div>
+					</div>
+
+                </div>
+				
+			<div class="footer">
+					<span class="footers">
+					Powered by: AIRCOINS NETFI &copy; All rights reserved<br>
+					
+					</span>				
+				</div>
+            </div>	
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/popper.min.js"></script>
+			<script src="assets/js/bootstrap.min.js"></script>
+			<script src="assets/js/toast.min.js"></script>
+			<script src="assets/js/core.js"></script>
+			<script src="assets/js/eload.js"></script>
+			<script src="assets/js/pako.min.js"></script>
+
+			
+			
+			<script>
+				var sessiontime = "$(session-time-left-secs)";
+				var uptime = "$(uptime-secs)";
+				var currentVoucher = "$(username)";
+				window.name="hotspot_status";
+				
+				$(document).ready(function(){
+					/* External mode is driven by the /api/session.php poller below; skip the
+					   router-native $(var) countdown here so the two never fight over #remainTime. */
+					if (window.PORTAL && PORTAL.external) { return; }
+					voucher = currentVoucher;
+					$("#expirationTime").html("Loading...");
+					setTimeout(function(){
+						fetchValidity(1);
+					}, 1000);
+					
+					setStorageValue('activeVoucher', currentVoucher);
+					
+					var time = sessiontime;
+					if(time == "0"){
+						$("#remainTime").html("Unlimited");
+					}else{
+						$("#remainTime").html(secondsToDhms(time));
+						remainingTimer = setInterval(function(){
+							time--;
+							$("#remainTime").html(secondsToDhms(time));
+							if(time <= 0){
+								$.toast({
+									title: 'Success',
+									content: 'Time limit exceeded, Thank you for the purchase, will be logout shortly',
+									type: 'success',
+									delay: 5000
+								});
+								clearInterval(remainingTimer);
+								setTimeout(function(){
+									document.logout.submit();
+								}, 6000);
+							}
+						}, 1000);
+					}
+					
+				});
+				
+				function fetchValidity(retryNo){
+					if(retryNo > 5){
+						fallbackValidity();
+						return;
+					}
+					var macNoColon = replaceAll(mac, ":");
+					$.ajax({
+							  type: "GET",
+							  url: "/data/"+macNoColon+".txt?query="+new Date().getTime(),
+							  success: function(data){
+								if(data.length > 50){
+									setTimeout(function(){
+										fetchValidity(retryNo++);
+									}, 1000);
+									return;
+								}
+								var macData = data.split("#");
+								var validityRaw = macData[1];
+								
+								var validityTime = null;
+								if(validityRaw.length > 15){
+									validityTime = new Date(Date.parse(validityRaw));
+								}else if(validityRaw.length > 8){
+									var dt = validityRaw.split(" ");
+									var yr = new Date().getFullYear();
+									validityTime = new Date(Date.parse(dt[0]+"/"+yr+" "+dt[1]));
+								}else if(validityRaw.length == 0){
+									validityTime = null;
+								} else{
+									var curDate = new Date();
+									var m = curDate.getMonth()+1;
+									var d = curDate.getDate();
+									var yr = curDate.getFullYear();
+									validityTime = new Date(Date.parse(m+"/"+d+"/"+yr+" "+validityRaw));
+								}
+								if(validityTime != null){
+									$("#expirationTime").html(validityTime.toLocaleString());
+								}else{
+									$("#expirationTime").html("No Expiration");
+								}
+							  },
+							  error: function(d){
+									fallbackValidity();
+							 }
+					});			
+				}
+				
+				function fallbackValidity(){
+					var validity = getStorageValue(voucher+"validity");
+					if(validity != null){
+						var curDate = new Date();
+						var validityTime = new Date(parseInt(validity));
+						if(validityTime.getTime() < curDate.getTime()){
+							removeStorageValue(voucher+"validity");
+							removeStorageValue(voucher+"tempValidity");
+							$("#expirationTime").html("Not Available");
+						}else{
+							$("#expirationTime").html(validityTime.toLocaleString());
+						}
+					}else{
+						$("#expirationTime").html("Not Available");
+					}
+				}
+				
+				/* $(if refresh-timeout) */
+					if (!(window.PORTAL && PORTAL.external)) {
+						setInterval(function(){
+							if(!insertingCoin){
+								location.reload();
+							}
+						}, $(refresh-timeout-secs) * 1000);
+					}
+				/* $(endif) */
+			</script>
+			
+			
+			<script>
+			/* ==================================================================
+			   EXTERNAL MODE (served by SBC lighttpd). Router-native = no-op.
+			   Polls /api/session.php?mac=<mac> every 10s for live session data
+			   and drives the countdown/display. On fetch failure it falls back
+			   to counting down from the `left` snapshot param. PAUSE navigates
+			   to the router logout URL passed via the `logout` param.
+			   ================================================================== */
+			(function () {
+				if (!(window.PORTAL && PORTAL.external)) { return; }
+
+				var p = PORTAL.params || {};
+				var mac = p.mac || '';
+				var snapshot = parseInt(p.left, 10);   /* seconds-left snapshot from URL */
+				var fallbackTimer = null;
+
+				function ready(fn) {
+					if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', fn); }
+					else { fn(); }
+				}
+				function setText(id, val) { var el = document.getElementById(id); if (el) { el.textContent = val; } }
+				function fmtDuration(sec) {
+					sec = parseInt(sec, 10); if (isNaN(sec) || sec < 0) { sec = 0; }
+					var d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
+					var m = Math.floor((sec % 3600) / 60), s = sec % 60;
+					return d + 'd ' + h + 'h ' + m + 'm ' + s + 's';
+				}
+				function fmtBytes(b) {
+					b = parseFloat(b); if (isNaN(b) || b < 0) { b = 0; }
+					var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+					while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+					return (i === 0 ? b : b.toFixed(2)) + ' ' + u[i];
+				}
+				/* render remaining time using the same formatter as router-native when available */
+				function renderRemain(sec) {
+					sec = parseInt(sec, 10); if (isNaN(sec) || sec < 0) { sec = 0; }
+					if (typeof secondsToDhms === 'function') { setText('remainTime', secondsToDhms(sec)); }
+					else { setText('remainTime', fmtDuration(sec)); }
+				}
+
+				/* PAUSE (and the logout forms) must hit the router logout URL in external mode */
+				function wireLogout() {
+					var btn = document.getElementById('pauseTimeBtn');
+					if (btn && p.logout) { btn.onclick = function () { window.location.href = p.logout; return false; }; }
+					var forms = document.getElementsByName('logout');
+					for (var i = 0; i < forms.length; i++) { if (p.logout) { forms[i].setAttribute('action', p.logout); } }
+				}
+				function showUptime(on) {
+					var b = document.getElementById('extUptimeBreak'), h = document.getElementById('extUptimeHolder');
+					if (b) { b.style.display = on ? '' : 'none'; }
+					if (h) { h.style.display = on ? '' : 'none'; }
+				}
+				function redirectToLogin() {
+					window.location.href = (typeof PORTAL.loginUrl === 'function') ? PORTAL.loginUrl() : 'login.html';
+				}
+
+				/* fallback: count down locally from the snapshot when the API is unreachable */
+				function startFallback() {
+					if (fallbackTimer) { return; }
+					var t = isNaN(snapshot) ? 0 : snapshot;
+					renderRemain(t);
+					fallbackTimer = setInterval(function () {
+						t--; if (t <= 0) { t = 0; clearInterval(fallbackTimer); fallbackTimer = null; }
+						renderRemain(t);
+					}, 1000);
+				}
+
+				function applySession(d) {
+					if (!d) { return; }
+					if (d.connected === false || d.connected === 'false') { redirectToLogin(); return; }
+					if (typeof d.time_left !== 'undefined' && d.time_left !== null) {
+						var tl = parseInt(d.time_left, 10); if (!isNaN(tl)) { snapshot = tl; renderRemain(tl); }
+					}
+					if (typeof d.bytes_in !== 'undefined' && d.bytes_in !== null) { setText('extBytesIn', fmtBytes(d.bytes_in)); }
+					if (typeof d.bytes_out !== 'undefined' && d.bytes_out !== null) { setText('extBytesOut', fmtBytes(d.bytes_out)); }
+					if (typeof d.uptime !== 'undefined' && d.uptime !== null) { showUptime(true); setText('extUptime', fmtDuration(d.uptime)); }
+					if (typeof d.user !== 'undefined' && d.user !== null && d.user !== '') { setText('extUsername', d.user); }
+				}
+
+				function poll() {
+					if (typeof fetch !== 'function') { startFallback(); return; }
+					fetch('/api/session.php?mac=' + encodeURIComponent(mac), { cache: 'no-store' })
+						.then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+						.then(function (d) {
+							/* live data is authoritative: drop any snapshot fallback */
+							if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
+							applySession(d);
+						})
+						.catch(function () { startFallback(); });
+				}
+
+				ready(function () {
+					wireLogout();
+					if (!isNaN(snapshot)) { renderRemain(snapshot); }   /* initial paint from snapshot */
+					poll();
+					setInterval(poll, 10000);
+				});
+			})();
+			</script>
+
+			<div id="loaderDiv" class="spinner hidden">
+				<center>
+					<img src="assets/loading.svg" />
+				</center>
+			</div>
+</div>
+</center>
+</div>
+</body>
+
+</html>

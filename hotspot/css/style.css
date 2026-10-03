@@ -1,0 +1,769 @@
+/* =========================================================
+   AIRCOINS NETFI — Hotspot Captive Portal Stylesheet
+   MikroTik RouterOS hotspot redesign (mobile-first)
+   ---------------------------------------------------------
+   Palette   : primary #00BCD4 (teal) / danger #E91E63
+               buttons #757575 (gray) / text #333 / muted #777
+   Background: #f0f0f0 body, #ffffff content card
+   Font      : system stack (Arial, Helvetica, sans-serif)
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   1. Design tokens
+   --------------------------------------------------------- */
+:root {
+    --primary: #00BCD4;
+    --primary-dark: #00A5BB;
+    --primary-glow: rgba(0, 188, 212, 0.45);
+    --danger: #E91E63;
+    --btn-gray: #757575;
+    --btn-gray-dark: #616161;
+    --light-gray: #9E9E9E;
+    --text-dark: #333333;
+    --text-muted: #777777;
+    --bg: #f0f0f0;
+    --card: #ffffff;
+    --border: #dddddd;
+    --amber-bg: #fff8e1;
+    --amber-text: #a67c00;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    --radius-btn: 25px;
+    --font: Arial, Helvetica, sans-serif;
+}
+
+/* ---------------------------------------------------------
+   2. Reset / base
+   --------------------------------------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: var(--font);
+    color: var(--text-dark);
+    background-color: var(--bg);
+    /* subtle dot texture so the light background is not dead flat */
+    background-image: radial-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+    background-size: 18px 18px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--primary-dark);
+}
+
+img,
+svg {
+    display: block;
+}
+
+button,
+input {
+    font-family: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+/* ---------------------------------------------------------
+   3. Layout: container / banner / content card
+   --------------------------------------------------------- */
+.container {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+}
+
+/*
+ * BANNER
+ * Gradient placeholder with a gaming/arcade feel (deep charcoal
+ * + teal glow + ember orange, plus a faint scanline grid).
+ *
+ * >>> TO USE A CUSTOM IMAGE <<<
+ * Drop your file into img/ (e.g. img/banner.jpg) and add:
+ *     style="background-image:url('img/banner.jpg');background-size:cover;background-position:center"
+ * to the .banner div in the HTML, or set it here in the CSS.
+ */
+.banner {
+    position: relative;
+    height: 150px;
+    overflow: hidden;
+    border-bottom: 4px solid var(--primary);
+    background:
+        radial-gradient(ellipse at 78% 22%, rgba(0, 188, 212, 0.30), transparent 55%),
+        radial-gradient(ellipse at 12% 85%, rgba(255, 87, 34, 0.22), transparent 52%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 44px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 44px),
+        linear-gradient(135deg, #10181d 0%, #1c2e36 55%, #0b1114 100%);
+}
+
+.banner-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 14px 18px;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65);
+}
+
+.banner-tag {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 4px;
+}
+
+.banner-sub {
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 6px;
+}
+
+/* Content card slightly overlaps the banner bottom edge */
+.content {
+    position: relative;
+    z-index: 2;
+    background: var(--card);
+    margin: -26px 12px 24px;
+    padding: 8px 18px 18px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+}
+
+/* Staggered entrance for content blocks */
+.content > * {
+    animation: rise 0.45s ease both;
+}
+
+.content > *:nth-child(1) { animation-delay: 0.05s; }
+.content > *:nth-child(2) { animation-delay: 0.10s; }
+.content > *:nth-child(3) { animation-delay: 0.15s; }
+.content > *:nth-child(4) { animation-delay: 0.20s; }
+.content > *:nth-child(5) { animation-delay: 0.25s; }
+.content > *:nth-child(6) { animation-delay: 0.30s; }
+.content > *:nth-child(7) { animation-delay: 0.35s; }
+.content > *:nth-child(8) { animation-delay: 0.40s; }
+.content > *:nth-child(9) { animation-delay: 0.45s; }
+.content > *:nth-child(n + 10) { animation-delay: 0.50s; }
+
+/* ---------------------------------------------------------
+   4. Status / info text
+   --------------------------------------------------------- */
+.status-text {
+    margin: 20px 0 8px;
+    font-size: 38px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    line-height: 1.1;
+    text-align: center;
+}
+
+.status-text.connected {
+    color: var(--primary);
+}
+
+.status-text.disconnected {
+    color: var(--danger);
+}
+
+.user-info,
+.balance-info {
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+    word-break: break-all;
+}
+
+.balance-info {
+    margin-bottom: 6px;
+}
+
+.session-note {
+    margin: 2px 0 8px;
+    color: var(--light-gray);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    word-break: break-all;
+}
+
+.session-note:empty {
+    display: none;
+}
+
+.session-stats {
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.blocked-note {
+    display: block;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--amber-bg);
+    border: 1px solid rgba(166, 124, 0, 0.35);
+    border-radius: 10px;
+    color: var(--amber-text);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* ---------------------------------------------------------
+   5. Countdown timer
+   --------------------------------------------------------- */
+.timer {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    margin: 14px 0 22px;
+    color: var(--primary);
+}
+
+.timer .number {
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.timer .label {
+    margin-right: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    opacity: 0.85;
+}
+
+.timer .label:last-child {
+    margin-right: 0;
+}
+
+.timer-unlimited {
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 5px;
+}
+
+/* ---------------------------------------------------------
+   6. Buttons
+   --------------------------------------------------------- */
+.btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 14px 18px;
+    border: 0;
+    border-radius: var(--radius-btn);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    text-decoration: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+    transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+    filter: brightness(1.08);
+}
+
+.btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.btn:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.btn-gray {
+    background: var(--btn-gray);
+}
+
+.btn-gray:hover {
+    background: var(--btn-gray-dark);
+    filter: none;
+}
+
+.btn-primary {
+    background: var(--primary);
+}
+
+.btn-danger {
+    background: var(--danger);
+}
+
+.btn:disabled,
+.btn[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+    box-shadow: none;
+}
+
+/* ---------------------------------------------------------
+   7. Voucher section
+   --------------------------------------------------------- */
+.voucher-section {
+    margin-top: 18px;
+}
+
+.voucher-row {
+    display: flex;
+    width: 100%;
+}
+
+.voucher-input {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    padding: 0 14px;
+    border: 2px solid var(--border);
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
+    background: #ffffff;
+    color: var(--text-dark);
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.voucher-input:focus {
+    border-color: var(--primary);
+}
+
+.voucher-input::placeholder {
+    color: var(--light-gray);
+}
+
+.voucher-submit {
+    height: 48px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 0 10px 10px 0;
+    background: #333333;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    transition: background 0.15s ease;
+}
+
+.voucher-submit:hover {
+    background: #000000;
+}
+
+.voucher-submit:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* REDEEM attention pulse on the voucher field */
+.voucher-row.pulse .voucher-input {
+    animation: pulseBorder 0.9s ease;
+}
+
+/* Empty-voucher shake */
+.voucher-row.shake {
+    animation: shake 0.35s ease;
+}
+
+/* ---------------------------------------------------------
+   8. Generic form inputs (username / password with icons)
+   --------------------------------------------------------- */
+.input-wrap {
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.input-wrap .field-ico {
+    position: absolute;
+    top: 15px;
+    left: 14px;
+    width: 18px;
+    height: 18px;
+    opacity: 0.45;
+}
+
+.input-wrap input[type="text"],
+.input-wrap input[type="password"] {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px 0 42px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--text-dark);
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.input-wrap input[type="text"]:focus,
+.input-wrap input[type="password"]:focus {
+    border-color: var(--primary);
+}
+
+/* ---------------------------------------------------------
+   9. Messages (error / info)
+   --------------------------------------------------------- */
+.error-msg {
+    margin-bottom: 12px;
+    padding: 11px 14px;
+    background: #fdeaf0;
+    border: 1px solid rgba(233, 30, 99, 0.35);
+    border-radius: 10px;
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    word-break: break-word;
+}
+
+.redirect-msg {
+    margin: 6px 0 4px;
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+}
+
+.redirect-hint {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.redirect-hint a {
+    color: var(--primary-dark);
+    font-weight: 700;
+}
+
+.spinner {
+    width: 42px;
+    height: 42px;
+    margin: 18px auto;
+    border: 4px solid rgba(0, 188, 212, 0.2);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* ---------------------------------------------------------
+   10. Session summary (logout page)
+   --------------------------------------------------------- */
+.summary {
+    margin: 16px 0 20px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-row:last-child {
+    border-bottom: 0;
+}
+
+.summary-row:nth-child(odd) {
+    background: #fafafa;
+}
+
+.summary-key {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.summary-val {
+    color: var(--text-dark);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: right;
+    word-break: break-all;
+}
+
+/* ---------------------------------------------------------
+   11. WiFi Rates modal
+   --------------------------------------------------------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal-card {
+    width: 100%;
+    max-width: 340px;
+    padding: 24px 22px;
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    animation: slideUp 0.25s ease;
+}
+
+.modal-title {
+    margin-bottom: 8px;
+    color: var(--text-dark);
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 3px;
+}
+
+.rates-divider {
+    margin: 8px 0;
+    border-top: 2px solid var(--text-dark);
+}
+
+.rates-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.rates-table td {
+    padding: 9px 4px;
+    border-bottom: 1px dashed #e5e5e5;
+    font-size: 15px;
+}
+
+.rates-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.rates-table td:first-child {
+    color: var(--primary-dark);
+    font-weight: 700;
+    text-align: left;
+}
+
+.rates-table td:last-child {
+    color: var(--text-muted);
+    text-align: right;
+}
+
+/* ---------------------------------------------------------
+   12. Footer
+   --------------------------------------------------------- */
+.footer {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.footer a {
+    color: var(--primary-dark);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+/* ---------------------------------------------------------
+   13. Chat bubble
+   --------------------------------------------------------- */
+.chat-bubble {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 4px 14px var(--primary-glow);
+    animation: chatPulse 2.4s ease-in-out infinite;
+    transition: transform 0.15s ease;
+}
+
+.chat-bubble:hover {
+    transform: scale(1.07);
+}
+
+.chat-bubble svg {
+    width: 26px;
+    height: 26px;
+    fill: #ffffff;
+}
+
+/* ---------------------------------------------------------
+   14. Animations
+   --------------------------------------------------------- */
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes chatPulse {
+    0%,
+    100% {
+        box-shadow: 0 4px 14px var(--primary-glow);
+    }
+    50% {
+        box-shadow: 0 4px 14px var(--primary-glow), 0 0 0 8px rgba(0, 188, 212, 0.15);
+    }
+}
+
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-6px);
+    }
+    50% {
+        transform: translateX(6px);
+    }
+    75% {
+        transform: translateX(-4px);
+    }
+}
+
+@keyframes pulseBorder {
+    0%,
+    100% {
+        border-color: var(--border);
+    }
+    40% {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(0, 188, 212, 0.2);
+    }
+}
+
+/* ---------------------------------------------------------
+   15. Responsive breakpoints
+   --------------------------------------------------------- */
+/* Small phones */
+@media (max-width: 360px) {
+    .content {
+        margin: -20px 8px 16px;
+        padding: 6px 14px 14px;
+    }
+
+    .status-text {
+        font-size: 30px;
+        letter-spacing: 2px;
+    }
+
+    .timer .number {
+        font-size: 26px;
+    }
+
+    .timer .label {
+        font-size: 12px;
+        margin-right: 7px;
+    }
+
+    .btn {
+        padding: 13px 12px;
+        font-size: 14px;
+        letter-spacing: 1.5px;
+    }
+
+    .voucher-submit {
+        padding: 0 14px;
+    }
+}
+
+/* Larger phones / small tablets: give the card room to breathe */
+@media (min-width: 481px) {
+    .container {
+        padding: 24px 0 48px;
+    }
+
+    .content {
+        margin: -26px 16px 0;
+    }
+
+    .banner {
+        border-radius: 16px 16px 0 0;
+    }
+}
+
+/* Desktop: keep the phone-like column centered */
+@media (min-width: 720px) {
+    body {
+        padding-top: 28px;
+    }
+
+    .container {
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.14);
+        border-radius: 18px;
+        overflow: hidden;
+        background: var(--card);
+    }
+
+    .content {
+        box-shadow: none;
+        margin: -26px 16px 0;
+        background: transparent;
+    }
+}

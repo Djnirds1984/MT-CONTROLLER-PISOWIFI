@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Router-side ALOGIN STUB (served by MikroTik /hotspot/alogin.html)
+
+  This is the POST-LOGIN page. RouterOS redirects here after a successful
+  hotspot authentication (the HTTP-PAP login submitted by the SBC portal form).
+
+  Because the ROUTER serves this file, all $(var) tokens ARE substituted.
+
+  Where the user lands:
+    * $(link-redirect) is the address RouterOS was asked to send the user to.
+      The SBC portal login form sets its "dst" field to the SBC STATUS page
+      (http://192.168.88.10/status.html?...) carrying the session params, so
+      $(link-redirect) resolves to that SBC status URL and the user is dropped
+      straight onto the live status/countdown screen.
+    * If no dst was supplied, $(link-redirect) falls back to the user's
+      originally requested page — which is exactly the desired behaviour too.
+
+  Replace 192.168.88.10 with your SBC panel IP if you edit the fallback URL.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIRCOINS NETFI — Connected</title>
+<!-- Primary: forward to RouterOS' redirect target (usually the SBC status page) -->
+<meta http-equiv="refresh" content="0; url=$(link-redirect)">
+<!--
+  JavaScript fallback / popup handling.
+  The portal login form posts with popup=false, so no window.open() is needed.
+  If the browser opened this page as a popup, try to reuse it; otherwise just
+  navigate. location.replace avoids leaving this stub in history.
+-->
+<script>
+  (function () {
+    var target = "$(link-redirect)";
+    if (!target) { target = "http://192.168.88.10/status.html"; }
+    if (window.opener) {
+      try { window.opener.location = target; } catch (e) {}
+      window.close();
+    }
+    location.replace(target);
+  })();
+</script>
+</head>
+<body>
+You are connected to AIRCOINS NETFI. Redirecting to your status page...
+</body>
+</html>
