@@ -1,0 +1,6 @@
+- Every mutating POST branch calls `csrf_verify()` before processing and logs the action via `aircoins_audit($pdo, $adminId, '<event>', '<detail>')`.
+- State-changing actions follow Post-Redirect-Get: after a successful mutation they set a flash message via `aircoins_flash()` and `header('Location: ...'); exit;`.
+- External router calls are wrapped in try/catch blocks that surface errors as user-facing flash banners rather than throwing to the browser.
+- All user-supplied strings rendered into HTML go through the `e()` escape helper; numeric values are cast explicitly (e.g. `(int)`).
+- Database access uses prepared statements with named parameters (`:id`, `:rid`, etc.) and queries over `routers`/`monitor_samples` tables are wrapped in try/catch so a bad DB leaves the page with empty lists instead of a fatal error.
+- Each script begins with `declare(strict_types=1);` and a docblock describing its HTTP contract (GET/POST behavior).

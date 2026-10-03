@@ -1,0 +1,1 @@
+RouterOS-served HTML stubs that intercept MikroTik hotspot login, alogin, logout, and error endpoints and redirect clients to the SBC captive portal.

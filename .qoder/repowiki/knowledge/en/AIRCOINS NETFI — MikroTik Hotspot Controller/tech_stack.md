@@ -1,0 +1,1 @@
+PHP 8.x with no framework and no Composer; lighttpd + php-fpm (ondemand pool) on Debian/Ubuntu/Armbian; SQLite for persistence; libsodium for at-rest encryption of router passwords; Argon2id for admin password hashing; RouterOS REST API (v7) and Legacy binary API (v6/v7).

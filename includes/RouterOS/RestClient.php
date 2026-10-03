@@ -134,17 +134,17 @@ class RestClient implements RouterClient
     /** @inheritDoc */
     public function hotspotProfiles(): array
     {
-        $rows = $this->get('/ip/hotspot/profile');
+        $rows = $this->get('/ip/hotspot/user/profile');
         $out  = [];
         foreach (self::asList($rows) as $r) {
             $out[] = [
                 '.id'              => (string) ($r['.id'] ?? ''),
                 'name'             => (string) ($r['name'] ?? ''),
-                'login-by'         => (string) ($r['login-by'] ?? ''),
+                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
                 'session-timeout'  => (string) ($r['session-timeout'] ?? ''),
                 'uptime-limit'     => (string) ($r['uptime-limit'] ?? ''),
-                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
                 'shared-users'     => (string) ($r['shared-users'] ?? ''),
+                'idle-timeout'     => (string) ($r['idle-timeout'] ?? ''),
             ];
         }
         return $out;
@@ -154,13 +154,13 @@ class RestClient implements RouterClient
     public function addHotspotProfile(array $attrs): array
     {
         $body = ['name' => (string) ($attrs['name'] ?? '')];
-        $optional = ['login-by', 'session-timeout', 'uptime-limit', 'rate-limit', 'shared-users', 'idle-timeout'];
+        $optional = ['rate-limit', 'session-timeout', 'uptime-limit', 'shared-users', 'idle-timeout'];
         foreach ($optional as $key) {
             if (!empty($attrs[$key])) {
                 $body[$key] = (string) $attrs[$key];
             }
         }
-        $d = $this->put('/ip/hotspot/profile', $body);
+        $d = $this->put('/ip/hotspot/user/profile', $body);
         return [
             '.id'  => (string) ($d['.id'] ?? ''),
             'name' => $body['name'],
@@ -170,7 +170,7 @@ class RestClient implements RouterClient
     /** @inheritDoc */
     public function deleteHotspotProfile(string $id): bool
     {
-        $this->delete('/ip/hotspot/profile/' . $id);
+        $this->delete('/ip/hotspot/user/profile/' . $id);
         return true;
     }
 

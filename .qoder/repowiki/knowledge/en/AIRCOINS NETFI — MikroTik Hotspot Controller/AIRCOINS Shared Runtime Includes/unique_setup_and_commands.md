@@ -1,0 +1,1 @@
+Requires the PHP `sodium` extension and two out-of-web-root artifacts configured via constants in `config.php`: `AIRCOINS_DB` (SQLite file path) and `AIRCOINS_KEY` (32-byte secret key file). The database schema is bootstrapped idempotently through `aircoins_schema($pdo)` which creates `admins`, `routers`, `login_attempts`, `audit_log`, and `monitor_samples` tables plus indexes.

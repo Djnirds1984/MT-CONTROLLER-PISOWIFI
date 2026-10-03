@@ -511,17 +511,17 @@ class LegacyApiClient implements RouterClient
     /** @inheritDoc */
     public function hotspotProfiles(): array
     {
-        $recs = $this->cmd('/ip/hotspot/profile/print');
+        $recs = $this->cmd('/ip/hotspot/user/profile/print');
         $out  = [];
         foreach ($recs as $r) {
             $out[] = [
                 '.id'              => (string) ($r['.id'] ?? ''),
                 'name'             => (string) ($r['name'] ?? ''),
-                'login-by'         => (string) ($r['login-by'] ?? ''),
+                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
                 'session-timeout'  => (string) ($r['session-timeout'] ?? ''),
                 'uptime-limit'     => (string) ($r['uptime-limit'] ?? ''),
-                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
                 'shared-users'     => (string) ($r['shared-users'] ?? ''),
+                'idle-timeout'     => (string) ($r['idle-timeout'] ?? ''),
             ];
         }
         return $out;
@@ -531,13 +531,13 @@ class LegacyApiClient implements RouterClient
     public function addHotspotProfile(array $attrs): array
     {
         $add = ['name' => (string) ($attrs['name'] ?? '')];
-        $optional = ['login-by', 'session-timeout', 'uptime-limit', 'rate-limit', 'shared-users', 'idle-timeout'];
+        $optional = ['rate-limit', 'session-timeout', 'uptime-limit', 'shared-users', 'idle-timeout'];
         foreach ($optional as $key) {
             if (!empty($attrs[$key])) {
                 $add[$key] = (string) $attrs[$key];
             }
         }
-        $res = $this->exec('/ip/hotspot/profile/add', $add);
+        $res = $this->exec('/ip/hotspot/user/profile/add', $add);
         $id  = (string) ($res['done']['ret'] ?? $res['done']['.id'] ?? '');
         return [
             '.id'  => $id,
@@ -548,7 +548,7 @@ class LegacyApiClient implements RouterClient
     /** @inheritDoc */
     public function deleteHotspotProfile(string $id): bool
     {
-        $this->exec('/ip/hotspot/profile/remove', ['.id' => $id]);
+        $this->exec('/ip/hotspot/user/profile/remove', ['.id' => $id]);
         return true;
     }
 

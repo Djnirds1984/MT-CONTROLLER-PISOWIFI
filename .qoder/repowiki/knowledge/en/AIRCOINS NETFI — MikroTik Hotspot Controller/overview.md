@@ -1,0 +1,1 @@
+End-to-end captive-portal controller that splits a MikroTik hotspot login flow across thin router-stub pages and a PHP SBC hosting the portal, session API, and admin panel.

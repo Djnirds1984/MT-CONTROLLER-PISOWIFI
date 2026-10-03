@@ -1,0 +1,1 @@
+The hardcoded SBC IP `192.168.88.10` must be replaced everywhere it appears (both the `<meta http-equiv="refresh">` URL and the `location.replace()` URL) to match the actual SBC panel address; files are placed into the MikroTik `/hotspot/` directory via WinBox Files or API upload.

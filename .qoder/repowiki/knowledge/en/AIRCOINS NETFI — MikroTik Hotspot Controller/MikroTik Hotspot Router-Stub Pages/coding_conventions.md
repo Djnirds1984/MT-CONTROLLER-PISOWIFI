@@ -1,0 +1,4 @@
+- Each stub provides both a `<meta http-equiv="refresh">` redirect and an equivalent `location.replace()` JavaScript call so clients ignoring meta refresh still navigate correctly.
+- RouterOS template variables passed in URLs use the `-esc` suffix (e.g. `$(mac-esc)`, `$(ip-esc)`, `$(link-orig-esc)`) to ensure safe URL encoding of user-supplied values.
+- Every file begins with a multi-line HTML comment block documenting its purpose, the RouterOS endpoint it replaces, how `$(var)` tokens are substituted, and where the SBC IP must be edited.
+- Redirect targets consistently point to the SBC captive portal at `http://192.168.88.10/login.html` or `status.html`, keeping the SBC as the single source of truth for UI state.

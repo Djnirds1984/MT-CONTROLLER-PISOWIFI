@@ -1,0 +1,1 @@
+PHP admin web interface for managing MikroTik routers and hotspot users, with live monitoring of CPU/memory/uptime/session counts and per-interface traffic rates.

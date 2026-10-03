@@ -1,0 +1,1 @@
+Bootstraps an Ubuntu/Debian SBC as a captive-portal host (lighttpd + php-fpm) and ships the MikroTik RouterOS script that redirects hotspot clients to it.

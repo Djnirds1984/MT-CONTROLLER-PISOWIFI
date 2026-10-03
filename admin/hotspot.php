@@ -226,8 +226,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             aircoins_flash('error', 'Profile name is required.');
         } else {
             $attrs = ['name' => $name];
-            $loginBy = trim((string) ($_POST['login_by'] ?? ''));
-            if ($loginBy !== '') { $attrs['login-by'] = $loginBy; }
             $sessTimeout = trim((string) ($_POST['session_timeout'] ?? ''));
             if ($sessTimeout !== '') { $attrs['session-timeout'] = $sessTimeout; }
             $uptimeLimit = trim((string) ($_POST['uptime_limit'] ?? ''));
@@ -604,18 +602,6 @@ aircoins_header('Hotspot', 'hotspot');
               <label for="p-name">Profile name</label>
               <input class="input" id="p-name" name="profile_name" type="text" required placeholder="e.g. 1hr-voucher">
             </div>
-            <div class="field">
-              <label for="p-loginby">Login by</label>
-              <select class="select" id="p-loginby" name="login_by">
-                <option value="http-pap,cookie" selected>HTTP-PAP + cookie (recommended for SBC portal)</option>
-                <option value="http-pap">HTTP-PAP only</option>
-                <option value="http-chap">HTTP-CHAP</option>
-                <option value="http-chap,cookie">HTTP-CHAP + cookie</option>
-                <option value="cookie">Cookie only</option>
-                <option value="mac-cookie">MAC + cookie</option>
-              </select>
-              <p class="hint" style="margin-top:4px">Use <strong>http-pap,cookie</strong> for the external SBC portal.</p>
-            </div>
             <div class="form-grid">
               <div class="field">
                 <label for="p-session">Session timeout</label>
@@ -651,8 +637,6 @@ aircoins_header('Hotspot', 'hotspot');
         <div class="card__head"><h2 class="card__title">Profile guide</h2></div>
         <div class="card__body">
           <dl style="margin:0;font-size:13px">
-            <dt style="font-weight:600;margin-top:8px">Login by</dt>
-            <dd class="hint" style="margin:0 0 8px">How users authenticate. <strong>http-pap,cookie</strong> sends plaintext credentials + keeps a session cookie &mdash; required for the SBC external portal.</dd>
             <dt style="font-weight:600;margin-top:8px">Session timeout</dt>
             <dd class="hint" style="margin:0 0 8px">Max idle time before disconnect. After this, the user must re-login.</dd>
             <dt style="font-weight:600;margin-top:8px">Uptime limit</dt>
@@ -679,16 +663,15 @@ aircoins_header('Hotspot', 'hotspot');
         <?php else: ?>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>.id</th><th>Name</th><th>Login by</th><th>Session</th><th>Uptime</th><th>Rate</th><th>Shared</th><th class="actions">Actions</th></tr></thead>
+              <thead><tr><th>.id</th><th>Name</th><th>Rate</th><th>Session</th><th>Uptime</th><th>Shared</th><th class="actions">Actions</th></tr></thead>
               <tbody>
               <?php foreach ($profiles as $p): ?>
                 <tr>
                   <td class="mono"><?php echo e((string) ($p['.id'] ?? '')); ?></td>
                   <td><strong><?php echo e((string) ($p['name'] ?? '')); ?></strong></td>
-                  <td class="mono"><?php echo e((string) ($p['login-by'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($p['rate-limit'] ?? '')); ?></td>
                   <td class="mono"><?php echo e((string) ($p['session-timeout'] ?? '')); ?></td>
                   <td class="mono"><?php echo e((string) ($p['uptime-limit'] ?? '')); ?></td>
-                  <td class="mono"><?php echo e((string) ($p['rate-limit'] ?? '')); ?></td>
                   <td class="mono"><?php echo e((string) ($p['shared-users'] ?? '')); ?></td>
                   <td class="actions">
                     <form method="post" action="hotspot.php" style="display:inline">

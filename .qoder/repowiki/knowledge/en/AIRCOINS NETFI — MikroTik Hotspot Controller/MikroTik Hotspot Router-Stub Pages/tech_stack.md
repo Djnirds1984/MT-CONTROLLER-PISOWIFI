@@ -1,0 +1,1 @@
+Plain HTML5 served by MikroTik RouterOS hotspot engine; relies on RouterOS template variable substitution (`$(var)`) and the `IAMNOTLOGINSTRINGPLEASEDONTREMOVE` marker token.

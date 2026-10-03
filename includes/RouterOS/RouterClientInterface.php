@@ -15,9 +15,9 @@
  *   activeSessions()=> list of ['.id'=>string, 'user'=>string, 'mac'=>string,
  *                               'address'=>string, 'uptime'=>string,
  *                               'bytes-in'=>int, 'bytes-out'=>int]
- *   hotspotProfiles()=> list of ['.id'=>string, 'name'=>string, 'login-by'=>string,
+ *   hotspotProfiles()=> list of ['.id'=>string, 'name'=>string, 'rate-limit'=>string,
  *                               'session-timeout'=>string, 'uptime-limit'=>string,
- *                               'rate-limit'=>string, 'shared-users'=>string]
+ *                               'shared-users'=>string, 'idle-timeout'=>string]
  *   interfaces()    => list of ['.id'=>string, 'name'=>string, 'type'=>string,
  *                               'running'=>bool, 'rx-byte'=>int, 'tx-byte'=>int]
  *   testConnection()=> ['ok'=>bool, 'name'=>string, 'version'=>string, 'board-name'=>string]

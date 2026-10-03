@@ -1,0 +1,6 @@
+- Global configuration is exposed as `define(...)` calls guarded by `if (!defined('...'))` so callers can override values before this file is first included.
+- Every include starts with `declare(strict_types=1);` and uses `require_once __DIR__ . '/...'` for intra-module dependencies rather than namespaces or autoloading.
+- Database access goes through the lazy singleton `aircoins_db()` and all queries are parameterised with named placeholders (`:param`) executed via `PDOStatement::execute([...])` — no string interpolation into SQL.
+- RouterOS credential secrets are never persisted in plaintext: they are stored as base64(nonce || ciphertext) produced by `aircoins_encrypt()` and decrypted only inside `RouterFactory` per request.
+- RouterOS clients implement the shared `RouterClient` interface so both REST and legacy transports return identical normalised shapes (e.g. session rows with `.id`, `user`, `mac`, `bytes-in`, `bytes-out`).
+- User-facing HTML output is always passed through the `e()` helper (`htmlspecialchars` with `ENT_QUOTES | ENT_SUBSTITUTE`, UTF-8) to prevent XSS.

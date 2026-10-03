@@ -1,0 +1,1 @@
+PHP 8+ strict types for the REST endpoint; vanilla ES5 JavaScript (no framework) for the portal bridge; Bootstrap + jQuery + qrcode + pako + toast for the UI; MikroTik RouterOS `$(var)` template syntax for conditional token substitution.

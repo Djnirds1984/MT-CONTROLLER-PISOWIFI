@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: deployment
+title: SBC Deployment & MikroTik Hotspot Integration
+scope:
+    - deploy/
+source_files: []
+depends_on: []
+related_to:
+    - path: hotspot_portal
+    - path: router_stubs

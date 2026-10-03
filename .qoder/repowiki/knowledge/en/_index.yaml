@@ -1,0 +1,78 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: main
+nodes_managed: true
+exported_at: "2026-10-03T06:09:43Z"
+modules:
+    "":
+        dir_name: AIRCOINS NETFI — MikroTik Hotspot Controller
+        title: AIRCOINS NETFI — MikroTik Hotspot Controller
+        scope:
+            - .gitattributes
+            - DEPLOYMENT.md
+        source_files: []
+        children:
+            - admin_panel
+            - deployment
+            - hotspot_portal
+            - router_stubs
+            - shared_includes
+        depends_on: []
+        related_to: []
+    admin_panel:
+        dir_name: Admin Panel & Router Management UI
+        title: Admin Panel & Router Management UI
+        scope:
+            - admin/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: shared_includes
+    deployment:
+        dir_name: SBC Deployment & MikroTik Hotspot Integration
+        title: SBC Deployment & MikroTik Hotspot Integration
+        scope:
+            - deploy/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: hotspot_portal
+            - path: router_stubs
+    hotspot_portal:
+        dir_name: MikroTik Hotspot Captive Portal
+        title: MikroTik Hotspot Captive Portal
+        scope:
+            - hotspot/
+            - api/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: deployment
+            - path: router_stubs
+            - path: shared_includes
+    router_stubs:
+        dir_name: MikroTik Hotspot Router-Stub Pages
+        title: MikroTik Hotspot Router-Stub Pages
+        scope:
+            - router-stubs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: deployment
+            - path: hotspot_portal
+    shared_includes:
+        dir_name: AIRCOINS Shared Runtime Includes
+        title: AIRCOINS Shared Runtime Includes
+        scope:
+            - includes/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: admin_panel
+            - path: hotspot_portal

@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: hotspot_portal
+title: MikroTik Hotspot Captive Portal
+scope:
+    - hotspot/
+    - api/
+source_files: []
+depends_on: []
+related_to:
+    - path: deployment
+    - path: router_stubs
+    - path: shared_includes
