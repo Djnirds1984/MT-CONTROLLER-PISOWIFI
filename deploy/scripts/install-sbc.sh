@@ -147,7 +147,7 @@ step "2/10  Installing packages"
 info "apt-get update ..."
 apt-get update -y
 
-BASE_PKGS=(lighttpd openssl ufw ca-certificates)
+BASE_PKGS=(lighttpd lighttpd-mod-openssl openssl ufw ca-certificates)
 info "Installing base packages: ${BASE_PKGS[*]}"
 apt-get install -y "${BASE_PKGS[@]}"
 
