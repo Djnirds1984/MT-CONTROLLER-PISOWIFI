@@ -667,9 +667,34 @@ class LegacyApiClient implements RouterClient
     /** @inheritDoc */
     public function uploadHotspotStub(string $path, string $content): bool
     {
-        // The legacy binary API has no file-write command (/file is read-only).
-        // Delegate to the RouterOS v7 REST API on the www service (port 80),
-        // which supports PUT/PATCH on /file.
+        // The legacy binary API has no file-write command (/file is read-only),
+        // but it CAN find and remove files. Strategy: delete any existing file
+        // via legacy, then create fresh via REST PUT (no "file already exists").
+
+        // Step 1: Find the file's .id via legacy API (reliable).
+        $fileId = null;
+        try {
+            $recs = $this->cmd('/file/print', [], ['name' => $path]);
+            foreach ($recs as $r) {
+                if ((string) ($r['name'] ?? '') === $path) {
+                    $fileId = (string) ($r['.id'] ?? '');
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Listing failed — continue to PUT attempt.
+        }
+
+        // Step 2: Delete via legacy so REST PUT won't hit "file already exists".
+        if ($fileId !== null && $fileId !== '') {
+            try {
+                $this->cmd('/file/remove', ['.id' => $fileId]);
+            } catch (\Throwable $e) {
+                // Remove failed — continue anyway.
+            }
+        }
+
+        // Step 3: Create fresh via REST PUT (file no longer exists).
         require_once __DIR__ . '/RestClient.php';
         $rest = new RestClient([
             'host'       => $this->host,
