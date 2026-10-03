@@ -751,4 +751,136 @@ class LegacyApiClient implements RouterClient
         }
         return $out;
     }
+
+    /** @inheritDoc */
+    public function makeDhcpLeaseStatic(string $mac, string $comment = ''): array
+    {
+        // Normalize MAC to RouterOS format (uppercase with colons).
+        $hex = strtoupper(preg_replace('/[^0-9A-Fa-f]/', '', $mac));
+        $pairs = str_split($hex, 2);
+        $routerMac = implode(':', $pairs);
+
+        // Find the dynamic lease matching this MAC.
+        $recs = $this->cmd('/ip/dhcp-server/lease/print', [], ['mac-address' => $routerMac]);
+        if ($recs === []) {
+            throw new \RuntimeException('No DHCP lease found for MAC ' . $routerMac);
+        }
+        $lease = $recs[0];
+        $leaseId = (string) ($lease['.id'] ?? '');
+
+        // Set the lease to static.
+        $attrs = ['.id' => $leaseId, 'disabled' => 'false'];
+        if ($comment !== '') {
+            $attrs['comment'] = $comment;
+        }
+        $this->cmd('/ip/dhcp-server/lease/set', $attrs);
+
+        return [
+            '.id'         => $leaseId,
+            'mac-address' => (string) ($lease['mac-address'] ?? $routerMac),
+            'address'     => (string) ($lease['address'] ?? ''),
+            'host-name'   => (string) ($lease['host-name'] ?? ''),
+            'dynamic'     => false,
+        ];
+    }
+
+    /** @inheritDoc */
+    public function addIpBinding(string $address, string $comment = ''): array
+    {
+        $attrs = ['address' => $address, 'type' => 'bypassed'];
+        if ($comment !== '') {
+            $attrs['comment'] = $comment;
+        }
+        $recs = $this->cmd('/ip/hotspot/ip-binding/add', $attrs);
+        // The add command doesn't return the new .id directly; we need to find it.
+        $bindings = $this->cmd('/ip/hotspot/ip-binding/print', [], ['address' => $address]);
+        $id = '';
+        foreach ($bindings as $b) {
+            if ((string) ($b['address'] ?? '') === $address) {
+                $id = (string) ($b['.id'] ?? '');
+                break;
+            }
+        }
+        return [
+            '.id'     => $id,
+            'address' => $address,
+            'type'    => 'bypassed',
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteIpBinding(string $id): bool
+    {
+        $this->cmd('/ip/hotspot/ip-binding/remove', ['.id' => $id]);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function addWalledGarden(string $dstAddress, string $comment = ''): array
+    {
+        $attrs = [
+            'action'      => 'accept',
+            'dst-address' => $dstAddress,
+            'protocol'    => 'tcp',
+            'dst-port'    => '80',
+        ];
+        if ($comment !== '') {
+            $attrs['comment'] = $comment;
+        }
+        $this->cmd('/ip/hotspot/walled-garden/ip/add', $attrs);
+
+        // Find the created entry.
+        $entries = $this->cmd('/ip/hotspot/walled-garden/ip/print', [], ['dst-address' => $dstAddress]);
+        $id = '';
+        foreach ($entries as $e) {
+            if ((string) ($e['dst-address'] ?? '') === $dstAddress) {
+                $id = (string) ($e['.id'] ?? '');
+                break;
+            }
+        }
+        return [
+            '.id'         => $id,
+            'dst-address' => $dstAddress,
+            'action'      => 'accept',
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteWalledGarden(string $id): bool
+    {
+        $this->cmd('/ip/hotspot/walled-garden/ip/remove', ['.id' => $id]);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function ipBindings(): array
+    {
+        $recs = $this->cmd('/ip/hotspot/ip-binding/print');
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                '.id'     => (string) ($r['.id'] ?? ''),
+                'address' => (string) ($r['address'] ?? ''),
+                'type'    => (string) ($r['type'] ?? ''),
+                'comment' => (string) ($r['comment'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
+    public function walledGarden(): array
+    {
+        $recs = $this->cmd('/ip/hotspot/walled-garden/ip/print');
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                '.id'         => (string) ($r['.id'] ?? ''),
+                'dst-address' => (string) ($r['dst-address'] ?? ''),
+                'action'      => (string) ($r['action'] ?? ''),
+                'comment'     => (string) ($r['comment'] ?? ''),
+            ];
+        }
+        return $out;
+    }
 }

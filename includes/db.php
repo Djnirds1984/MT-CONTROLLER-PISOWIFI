@@ -146,4 +146,21 @@ CREATE TABLE IF NOT EXISTS voucher_log (
 SQL);
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_voucher_log_code ON voucher_log (code)');
+
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS vendo_devices (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac_address  TEXT UNIQUE NOT NULL,
+    ip_address   TEXT,
+    hostname     TEXT,
+    router_id    INTEGER,
+    status       TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','disabled')),
+    assigned_ip  TEXT,
+    accepted_at  INTEGER,
+    last_seen    INTEGER,
+    created_at   INTEGER
+)
+SQL);
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_vendo_devices_status ON vendo_devices (status)');
 }

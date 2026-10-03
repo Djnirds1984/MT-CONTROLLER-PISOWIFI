@@ -162,4 +162,64 @@ interface RouterClient
      * @throws RuntimeException When the listing fails.
      */
     public function listFiles(string $dir): array;
+
+    /**
+     * Make a DHCP lease static (permanent) for a given MAC address.
+     *
+     * Finds the dynamic lease matching the MAC and sets it to static,
+     * optionally adding a comment.
+     *
+     * @param string $mac     MAC address (any format).
+     * @param string $comment Optional comment for the lease.
+     * @return array<string,mixed> The updated lease record.
+     */
+    public function makeDhcpLeaseStatic(string $mac, string $comment = ''): array;
+
+    /**
+     * Add a hotspot IP binding entry (type=bypassed) for a given address.
+     *
+     * @param string $address IP address to bypass.
+     * @param string $comment Optional comment.
+     * @return array<string,mixed> The created binding record.
+     */
+    public function addIpBinding(string $address, string $comment = ''): array;
+
+    /**
+     * Remove a hotspot IP binding by its router-assigned id.
+     *
+     * @param string $id Router .id of the binding.
+     * @return bool True on success.
+     */
+    public function deleteIpBinding(string $id): bool;
+
+    /**
+     * Add a walled-garden entry allowing HTTP access to a destination.
+     *
+     * @param string $dstAddress Destination IP address.
+     * @param string $comment    Optional comment.
+     * @return array<string,mixed> The created walled-garden record.
+     */
+    public function addWalledGarden(string $dstAddress, string $comment = ''): array;
+
+    /**
+     * Remove a walled-garden entry by its router-assigned id.
+     *
+     * @param string $id Router .id of the walled-garden entry.
+     * @return bool True on success.
+     */
+    public function deleteWalledGarden(string $id): bool;
+
+    /**
+     * List all hotspot IP bindings.
+     *
+     * @return array<int,array<string,mixed>> Each entry: '.id', 'address', 'type', 'comment'.
+     */
+    public function ipBindings(): array;
+
+    /**
+     * List all walled-garden entries.
+     *
+     * @return array<int,array<string,mixed>> Each entry: '.id', 'dst-address', 'action', 'comment'.
+     */
+    public function walledGarden(): array;
 }

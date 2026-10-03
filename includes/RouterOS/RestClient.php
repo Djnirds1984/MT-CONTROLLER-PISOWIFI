@@ -546,4 +546,120 @@ class RestClient implements RouterClient
         }
         return $out;
     }
+
+    /** @inheritDoc */
+    public function makeDhcpLeaseStatic(string $mac, string $comment = ''): array
+    {
+        // Normalize MAC to RouterOS format (uppercase with colons).
+        $hex = strtoupper(preg_replace('/[^0-9A-Fa-f]/', '', $mac));
+        $pairs = str_split($hex, 2);
+        $routerMac = implode(':', $pairs);
+
+        // Find the dynamic lease matching this MAC.
+        $rows = $this->get('/ip/dhcp-server/lease', 'mac-address=' . rawurlencode($routerMac));
+        $list = self::asList($rows);
+        if ($list === []) {
+            throw new RuntimeException('No DHCP lease found for MAC ' . $routerMac);
+        }
+        $lease = $list[0];
+        $leaseId = (string) ($lease['.id'] ?? '');
+
+        // Set the lease to static.
+        $body = ['disabled' => 'false'];
+        if ($comment !== '') {
+            $body['comment'] = $comment;
+        }
+        $this->request('PATCH', '/ip/dhcp-server/lease/' . $leaseId, $body);
+
+        // Re-read to return updated record.
+        $updated = $this->get('/ip/dhcp-server/lease/' . $leaseId);
+        return [
+            '.id'         => $leaseId,
+            'mac-address' => (string) ($updated['mac-address'] ?? $routerMac),
+            'address'     => (string) ($updated['address'] ?? ''),
+            'host-name'   => (string) ($updated['host-name'] ?? ''),
+            'dynamic'     => self::toBool($updated['dynamic'] ?? false),
+        ];
+    }
+
+    /** @inheritDoc */
+    public function addIpBinding(string $address, string $comment = ''): array
+    {
+        $body = ['address' => $address, 'type' => 'bypassed'];
+        if ($comment !== '') {
+            $body['comment'] = $comment;
+        }
+        $d = $this->put('/ip/hotspot/ip-binding', $body);
+        return [
+            '.id'     => (string) ($d['.id'] ?? ''),
+            'address' => $address,
+            'type'    => 'bypassed',
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteIpBinding(string $id): bool
+    {
+        $this->delete('/ip/hotspot/ip-binding/' . $id);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function addWalledGarden(string $dstAddress, string $comment = ''): array
+    {
+        $body = [
+            'action'       => 'accept',
+            'dst-address'  => $dstAddress,
+            'protocol'     => 'tcp',
+            'dst-port'     => '80',
+        ];
+        if ($comment !== '') {
+            $body['comment'] = $comment;
+        }
+        $d = $this->put('/ip/hotspot/walled-garden/ip', $body);
+        return [
+            '.id'         => (string) ($d['.id'] ?? ''),
+            'dst-address' => $dstAddress,
+            'action'      => 'accept',
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteWalledGarden(string $id): bool
+    {
+        $this->delete('/ip/hotspot/walled-garden/ip/' . $id);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function ipBindings(): array
+    {
+        $rows = $this->get('/ip/hotspot/ip-binding');
+        $out  = [];
+        foreach (self::asList($rows) as $r) {
+            $out[] = [
+                '.id'     => (string) ($r['.id'] ?? ''),
+                'address' => (string) ($r['address'] ?? ''),
+                'type'    => (string) ($r['type'] ?? ''),
+                'comment' => (string) ($r['comment'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
+    public function walledGarden(): array
+    {
+        $rows = $this->get('/ip/hotspot/walled-garden/ip');
+        $out  = [];
+        foreach (self::asList($rows) as $r) {
+            $out[] = [
+                '.id'         => (string) ($r['.id'] ?? ''),
+                'dst-address' => (string) ($r['dst-address'] ?? ''),
+                'action'      => (string) ($r['action'] ?? ''),
+                'comment'     => (string) ($r['comment'] ?? ''),
+            ];
+        }
+        return $out;
+    }
 }
