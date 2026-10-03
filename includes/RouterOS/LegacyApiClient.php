@@ -667,11 +667,18 @@ class LegacyApiClient implements RouterClient
     /** @inheritDoc */
     public function uploadHotspotStub(string $path, string $content): bool
     {
-        // Legacy binary API: send raw content via /file command.
-        // The binary sentence protocol handles arbitrary bytes via length-prefix
-        // encoding, so no hex/base64 wrapping is needed.
-        $this->exec('/file', ['name' => $path, 'contents' => $content]);
-        return true;
+        // The legacy binary API has no file-write command (/file is read-only).
+        // Delegate to the RouterOS v7 REST API on the www service (port 80),
+        // which supports PUT/PATCH on /file.
+        require_once __DIR__ . '/RestClient.php';
+        $rest = new RestClient([
+            'host'       => $this->host,
+            'api_port'   => 80,
+            'username'   => $this->username,
+            'password'   => $this->password,
+            'tls_verify' => false,
+        ]);
+        return $rest->uploadHotspotStub($path, $content);
     }
 
     /** @inheritDoc */
