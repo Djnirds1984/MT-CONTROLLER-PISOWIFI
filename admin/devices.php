@@ -188,20 +188,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         $client = aircoins_router_client($router);
                         // MAC without colons, UPPERCASE — must match what login.html sends.
                         $macUser = str_replace(':', '', strtoupper($mac));
-                        // Try to create the user; if it already exists, delete+recreate.
-                        try {
-                            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
-                        } catch (Throwable $dup) {
-                            // User likely exists — find and delete it, then recreate.
-                            $users = $client->hotspotUsers();
-                            foreach ($users as $eu) {
-                                if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
-                                    $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
-                                    break;
-                                }
+                        // List first, remove any existing user with this MAC,
+                        // then create fresh — avoids "already have user" trap.
+                        $allUsers = $client->hotspotUsers();
+                        foreach ($allUsers as $eu) {
+                            if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
+                                $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
+                                break;
                             }
-                            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
                         }
+                        $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
                         $pushMsg = ' Session time pushed to router (' . $sessTime . ').';
                     } catch (Throwable $re) {
                         $pushMsg = ' (Router push failed: ' . $re->getMessage() . ')';
@@ -313,24 +309,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $newLimitSec = $currentLimitSec + $addSeconds;
             $newLimit    = aircoins_seconds_to_time($newLimitSec);
 
-            // Create the hotspot user with the updated limit-uptime.
-            // If it already exists on the router, delete + recreate (same
-            // pattern as the edit handler).  NOTE: we deliberately do NOT
-            // call hotspotUsers() to scan for the user — that hangs on the
-            // legacy binary API.
-            try {
-                $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
-            } catch (Throwable $dup) {
-                // User already exists — find by exact MAC name, delete, recreate.
-                $allUsers = $client->hotspotUsers();
-                foreach ($allUsers as $eu) {
-                    if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
-                        $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
-                        break;
-                    }
+            // Ensure the hotspot user exists with the correct limit-uptime.
+            // List existing users first and remove any that match this MAC
+            // (case-insensitive), then create fresh.  This avoids the
+            // "already have user" trap from RouterOS.
+            $allUsers = $client->hotspotUsers();
+            foreach ($allUsers as $eu) {
+                if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
+                    $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
+                    break;
                 }
-                $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
             }
+            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
 
             // Update DB session_time too.
             $newLimitDisplay = aircoins_seconds_to_time($addSeconds);
