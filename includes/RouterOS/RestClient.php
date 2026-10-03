@@ -132,6 +132,49 @@ class RestClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function hotspotProfiles(): array
+    {
+        $rows = $this->get('/ip/hotspot/profile');
+        $out  = [];
+        foreach (self::asList($rows) as $r) {
+            $out[] = [
+                '.id'              => (string) ($r['.id'] ?? ''),
+                'name'             => (string) ($r['name'] ?? ''),
+                'login-by'         => (string) ($r['login-by'] ?? ''),
+                'session-timeout'  => (string) ($r['session-timeout'] ?? ''),
+                'uptime-limit'     => (string) ($r['uptime-limit'] ?? ''),
+                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
+                'shared-users'     => (string) ($r['shared-users'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
+    public function addHotspotProfile(array $attrs): array
+    {
+        $body = ['name' => (string) ($attrs['name'] ?? '')];
+        $optional = ['login-by', 'session-timeout', 'uptime-limit', 'rate-limit', 'shared-users', 'idle-timeout'];
+        foreach ($optional as $key) {
+            if (!empty($attrs[$key])) {
+                $body[$key] = (string) $attrs[$key];
+            }
+        }
+        $d = $this->put('/ip/hotspot/profile', $body);
+        return [
+            '.id'  => (string) ($d['.id'] ?? ''),
+            'name' => $body['name'],
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteHotspotProfile(string $id): bool
+    {
+        $this->delete('/ip/hotspot/profile/' . $id);
+        return true;
+    }
+
+    /** @inheritDoc */
     public function activeSessions(): array
     {
         $rows = $this->get('/ip/hotspot/active');

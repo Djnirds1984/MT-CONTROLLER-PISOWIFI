@@ -2,12 +2,13 @@
 /**
  * AIRCOINS NETFI — hotspot management.
  *
- * Pick a router, then manage its hotspot across two tabs:
+ * Pick a router, then manage its hotspot across three tabs:
  *   Users           — list, add single user, bulk voucher generator, delete.
  *   Active Sessions — list live sessions and kick (disconnect) any of them.
+ *   Profiles        — list, create, delete hotspot user profiles.
  *
  * All client calls are wrapped in try/catch and surfaced as a friendly banner.
- * Every POST is CSRF-verified; add/delete/kick/voucher actions are audited.
+ * Every POST is CSRF-verified; add/delete/kick/voucher/profile actions are audited.
  * Router passwords are only ever handled inside the factory (never displayed).
  */
 
@@ -209,12 +210,62 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             try {
                 $client->kickSession($id);
                 aircoins_audit($pdo, $adminId, 'hotspot_session_kick', 'router #' . $routerId . ' session ' . $id . ' user ' . $user);
-                aircoins_flash('success', 'Disconnected ' . ($user !== '' ? '“' . $user . '”' : 'session') . '.');
+                aircoins_flash('success', 'Disconnected ' . ($user !== '' ? '"' . $user . '"' : 'session') . '.');
             } catch (Throwable $e) {
                 aircoins_flash('error', 'Kick failed: ' . $e->getMessage());
             }
         }
         header($back . '#sessions');
+        exit;
+    }
+    
+    // ---- create profile ----------------------------------------------------
+    if ($action === 'add_profile') {
+        $name = trim((string) ($_POST['profile_name'] ?? ''));
+        if ($name === '') {
+            aircoins_flash('error', 'Profile name is required.');
+        } else {
+            $attrs = ['name' => $name];
+            $loginBy = trim((string) ($_POST['login_by'] ?? ''));
+            if ($loginBy !== '') { $attrs['login-by'] = $loginBy; }
+            $sessTimeout = trim((string) ($_POST['session_timeout'] ?? ''));
+            if ($sessTimeout !== '') { $attrs['session-timeout'] = $sessTimeout; }
+            $uptimeLimit = trim((string) ($_POST['uptime_limit'] ?? ''));
+            if ($uptimeLimit !== '') { $attrs['uptime-limit'] = $uptimeLimit; }
+            $rateLimit = trim((string) ($_POST['rate_limit'] ?? ''));
+            if ($rateLimit !== '') { $attrs['rate-limit'] = $rateLimit; }
+            $sharedUsers = trim((string) ($_POST['shared_users'] ?? ''));
+            if ($sharedUsers !== '') { $attrs['shared-users'] = $sharedUsers; }
+            $idleTimeout = trim((string) ($_POST['idle_timeout'] ?? ''));
+            if ($idleTimeout !== '') { $attrs['idle-timeout'] = $idleTimeout; }
+            try {
+                $client->addHotspotProfile($attrs);
+                aircoins_audit($pdo, $adminId, 'hotspot_profile_add', 'router #' . $routerId . ' profile ' . $name);
+                aircoins_flash('success', 'Profile "' . $name . '" created.');
+            } catch (Throwable $e) {
+                aircoins_flash('error', 'Create profile failed: ' . $e->getMessage());
+            }
+        }
+        header($back . '#profiles');
+        exit;
+    }
+    
+    // ---- delete profile ----------------------------------------------------
+    if ($action === 'delete_profile') {
+        $id   = (string) ($_POST['id'] ?? '');
+        $name = (string) ($_POST['name'] ?? '');
+        if ($id === '') {
+            aircoins_flash('error', 'Missing profile id.');
+        } else {
+            try {
+                $client->deleteHotspotProfile($id);
+                aircoins_audit($pdo, $adminId, 'hotspot_profile_delete', 'router #' . $routerId . ' profile ' . ($name !== '' ? $name : $id));
+                aircoins_flash('success', 'Profile "' . ($name !== '' ? $name : $id) . '" deleted.');
+            } catch (Throwable $e) {
+                aircoins_flash('error', 'Delete profile failed: ' . $e->getMessage());
+            }
+        }
+        header($back . '#profiles');
         exit;
     }
 
@@ -229,6 +280,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 // ---------------------------------------------------------------------------
 $users = [];
 $sessions = [];
+$profiles = [];
 $banner = '';
 $bannerType = 'error';
 $client = null;
@@ -238,8 +290,9 @@ if ($router) {
         $client = aircoins_router_client($router);
         try { $users = $client->hotspotUsers(); } catch (Throwable $e) { $users = []; $banner = 'Could not load hotspot users: ' . $e->getMessage(); }
         try { $sessions = $client->activeSessions(); } catch (Throwable $e) { $sessions = []; if ($banner === '') { $banner = 'Could not load active sessions: ' . $e->getMessage(); } }
+        try { $profiles = $client->hotspotProfiles(); } catch (Throwable $e) { $profiles = []; if ($banner === '') { $banner = 'Could not load hotspot profiles: ' . $e->getMessage(); } }
     } catch (Throwable $e) {
-        $banner = 'Cannot reach router “' . (string) $router['name'] . '”: ' . $e->getMessage();
+        $banner = 'Cannot reach router "' . (string) $router['name'] . '": ' . $e->getMessage();
     }
 }
 
@@ -302,6 +355,7 @@ aircoins_header('Hotspot', 'hotspot');
   <div class="tabs">
     <button class="tab is-active" type="button" data-tab="users">Users &amp; Vouchers</button>
     <button class="tab" type="button" data-tab="sessions">Active Sessions <span class="badge badge--idle" style="margin-left:6px"><?php echo count($sessions); ?></span></button>
+    <button class="tab" type="button" data-tab="profiles">Profiles <span class="badge badge--idle" style="margin-left:6px"><?php echo count($profiles); ?></span></button>
   </div>
 
   <!-- ============================ USERS ============================ -->
@@ -346,7 +400,12 @@ aircoins_header('Hotspot', 'hotspot');
             </div>
             <div class="field">
               <label for="u-profile">Profile</label>
-              <input class="input" id="u-profile" name="profile" type="text" placeholder="default">
+              <select class="select" id="u-profile" name="profile">
+                <?php if ($profiles === []): ?><option value="default">default</option><?php endif; ?>
+                <?php foreach ($profiles as $p): ?>
+                  <option value="<?php echo e((string) $p['name']); ?>"><?php echo e((string) $p['name']); ?></option>
+                <?php endforeach; ?>
+              </select>
             </div>
             <div class="field">
               <label for="u-uptime">Session time</label>
@@ -398,7 +457,12 @@ aircoins_header('Hotspot', 'hotspot');
               </div>
               <div class="field">
                 <label for="v-profile">Profile</label>
-                <input class="input" id="v-profile" name="profile" type="text" placeholder="default">
+                <select class="select" id="v-profile" name="profile">
+                  <?php if ($profiles === []): ?><option value="default">default</option><?php endif; ?>
+                  <?php foreach ($profiles as $p): ?>
+                    <option value="<?php echo e((string) $p['name']); ?>"><?php echo e((string) $p['name']); ?></option>
+                  <?php endforeach; ?>
+                </select>
               </div>
             </div>
             <div class="field">
@@ -512,6 +576,129 @@ aircoins_header('Hotspot', 'hotspot');
                       <input type="hidden" name="user" value="<?php echo e((string) ($s['user'] ?? '')); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"
                               data-confirm="Disconnect <?php echo e((string) ($s['user'] ?? 'this session')); ?> now?">Kick</button>
+                    </form>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= PROFILES ========================= -->
+  <section class="tabpanel" data-panel="profiles" hidden>
+
+    <div class="grid grid--2" style="margin-bottom:20px;align-items:start">
+      <!-- create profile form -->
+      <div class="card">
+        <div class="card__head"><h2 class="card__title">Create profile</h2></div>
+        <div class="card__body">
+          <form method="post" action="hotspot.php" autocomplete="off">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="action" value="add_profile">
+            <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
+            <div class="field">
+              <label for="p-name">Profile name</label>
+              <input class="input" id="p-name" name="profile_name" type="text" required placeholder="e.g. 1hr-voucher">
+            </div>
+            <div class="field">
+              <label for="p-loginby">Login by</label>
+              <select class="select" id="p-loginby" name="login_by">
+                <option value="http-pap,cookie" selected>HTTP-PAP + cookie (recommended for SBC portal)</option>
+                <option value="http-pap">HTTP-PAP only</option>
+                <option value="http-chap">HTTP-CHAP</option>
+                <option value="http-chap,cookie">HTTP-CHAP + cookie</option>
+                <option value="cookie">Cookie only</option>
+                <option value="mac-cookie">MAC + cookie</option>
+              </select>
+              <p class="hint" style="margin-top:4px">Use <strong>http-pap,cookie</strong> for the external SBC portal.</p>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="p-session">Session timeout</label>
+                <input class="input input--mono" id="p-session" name="session_timeout" type="text" placeholder="e.g. 1h or 30m">
+              </div>
+              <div class="field">
+                <label for="p-uptime">Uptime limit</label>
+                <input class="input input--mono" id="p-uptime" name="uptime_limit" type="text" placeholder="e.g. 1h or 1d">
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="p-rate">Rate limit (rx/tx)</label>
+                <input class="input input--mono" id="p-rate" name="rate_limit" type="text" placeholder="e.g. 5M/5M">
+              </div>
+              <div class="field">
+                <label for="p-shared">Shared users</label>
+                <input class="input input--mono" id="p-shared" name="shared_users" type="number" min="1" max="100" value="1">
+              </div>
+            </div>
+            <div class="field">
+              <label for="p-idle">Idle timeout</label>
+              <input class="input input--mono" id="p-idle" name="idle_timeout" type="text" placeholder="e.g. 5m (optional)">
+            </div>
+            <p class="hint">Time values use MikroTik format: <code>30s</code>, <code>5m</code>, <code>1h</code>, <code>1d</code>. Leave blank for no limit.</p>
+            <button class="btn btn--primary btn--block" type="submit">Create profile</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- profile hints card -->
+      <div class="card">
+        <div class="card__head"><h2 class="card__title">Profile guide</h2></div>
+        <div class="card__body">
+          <dl style="margin:0;font-size:13px">
+            <dt style="font-weight:600;margin-top:8px">Login by</dt>
+            <dd class="hint" style="margin:0 0 8px">How users authenticate. <strong>http-pap,cookie</strong> sends plaintext credentials + keeps a session cookie &mdash; required for the SBC external portal.</dd>
+            <dt style="font-weight:600;margin-top:8px">Session timeout</dt>
+            <dd class="hint" style="margin:0 0 8px">Max idle time before disconnect. After this, the user must re-login.</dd>
+            <dt style="font-weight:600;margin-top:8px">Uptime limit</dt>
+            <dd class="hint" style="margin:0 0 8px">Total connected time allowed. The voucher's per-user uptime-limit overrides this.</dd>
+            <dt style="font-weight:600;margin-top:8px">Rate limit</dt>
+            <dd class="hint" style="margin:0 0 8px">Bandwidth cap per user. Format: <code>rx/tx</code> (e.g. <code>5M/5M</code> for 5 Mbps symmetric).</dd>
+            <dt style="font-weight:600;margin-top:8px">Shared users</dt>
+            <dd class="hint" style="margin:0 0 8px">How many devices can use one voucher simultaneously. Set to <strong>1</strong> for single-device vouchers.</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- profiles table -->
+    <div class="card">
+      <div class="card__head">
+        <h2 class="card__title">Hotspot profiles</h2>
+        <div class="spacer"></div>
+        <span class="hint"><?php echo count($profiles); ?> profile(s)</span>
+      </div>
+      <div class="card__body card__body--flush">
+        <?php if ($profiles === []): ?>
+          <div class="empty">No hotspot profiles found</div>
+        <?php else: ?>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>.id</th><th>Name</th><th>Login by</th><th>Session</th><th>Uptime</th><th>Rate</th><th>Shared</th><th class="actions">Actions</th></tr></thead>
+              <tbody>
+              <?php foreach ($profiles as $p): ?>
+                <tr>
+                  <td class="mono"><?php echo e((string) ($p['.id'] ?? '')); ?></td>
+                  <td><strong><?php echo e((string) ($p['name'] ?? '')); ?></strong></td>
+                  <td class="mono"><?php echo e((string) ($p['login-by'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($p['session-timeout'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($p['uptime-limit'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($p['rate-limit'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($p['shared-users'] ?? '')); ?></td>
+                  <td class="actions">
+                    <form method="post" action="hotspot.php" style="display:inline">
+                      <?php echo csrf_field(); ?>
+                      <input type="hidden" name="action" value="delete_profile">
+                      <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
+                      <input type="hidden" name="id" value="<?php echo e((string) ($p['.id'] ?? '')); ?>">
+                      <input type="hidden" name="name" value="<?php echo e((string) ($p['name'] ?? '')); ?>">
+                      <button class="btn btn--danger btn--sm" type="submit"
+                              data-confirm="Delete hotspot profile \"<?php echo e((string) ($p['name'] ?? '')); ?>\"? Users assigned to this profile will lose their settings.">Delete</button>
                     </form>
                   </td>
                 </tr>

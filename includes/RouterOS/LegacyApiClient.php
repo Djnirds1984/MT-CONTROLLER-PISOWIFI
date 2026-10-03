@@ -509,6 +509,50 @@ class LegacyApiClient implements RouterClient
     }
 
     /** @inheritDoc */
+    public function hotspotProfiles(): array
+    {
+        $recs = $this->cmd('/ip/hotspot/profile/print');
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                '.id'              => (string) ($r['.id'] ?? ''),
+                'name'             => (string) ($r['name'] ?? ''),
+                'login-by'         => (string) ($r['login-by'] ?? ''),
+                'session-timeout'  => (string) ($r['session-timeout'] ?? ''),
+                'uptime-limit'     => (string) ($r['uptime-limit'] ?? ''),
+                'rate-limit'       => (string) ($r['rate-limit'] ?? ''),
+                'shared-users'     => (string) ($r['shared-users'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
+    public function addHotspotProfile(array $attrs): array
+    {
+        $add = ['name' => (string) ($attrs['name'] ?? '')];
+        $optional = ['login-by', 'session-timeout', 'uptime-limit', 'rate-limit', 'shared-users', 'idle-timeout'];
+        foreach ($optional as $key) {
+            if (!empty($attrs[$key])) {
+                $add[$key] = (string) $attrs[$key];
+            }
+        }
+        $res = $this->exec('/ip/hotspot/profile/add', $add);
+        $id  = (string) ($res['done']['ret'] ?? $res['done']['.id'] ?? '');
+        return [
+            '.id'  => $id,
+            'name' => $add['name'],
+        ];
+    }
+
+    /** @inheritDoc */
+    public function deleteHotspotProfile(string $id): bool
+    {
+        $this->exec('/ip/hotspot/profile/remove', ['.id' => $id]);
+        return true;
+    }
+
+    /** @inheritDoc */
     public function activeSessions(): array
     {
         $recs = $this->cmd('/ip/hotspot/active/print');

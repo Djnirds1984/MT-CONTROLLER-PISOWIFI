@@ -15,6 +15,9 @@
  *   activeSessions()=> list of ['.id'=>string, 'user'=>string, 'mac'=>string,
  *                               'address'=>string, 'uptime'=>string,
  *                               'bytes-in'=>int, 'bytes-out'=>int]
+ *   hotspotProfiles()=> list of ['.id'=>string, 'name'=>string, 'login-by'=>string,
+ *                               'session-timeout'=>string, 'uptime-limit'=>string,
+ *                               'rate-limit'=>string, 'shared-users'=>string]
  *   interfaces()    => list of ['.id'=>string, 'name'=>string, 'type'=>string,
  *                               'running'=>bool, 'rx-byte'=>int, 'tx-byte'=>int]
  *   testConnection()=> ['ok'=>bool, 'name'=>string, 'version'=>string, 'board-name'=>string]
@@ -70,6 +73,31 @@ interface RouterClient
      * @return bool True on success.
      */
     public function deleteHotspotUser(string $id): bool;
+
+    /**
+     * @return array<int,array<string,mixed>> All hotspot user profiles.
+     *   Each entry: '.id', 'name', 'login-by', 'session-timeout',
+     *   'uptime-limit', 'rate-limit', 'shared-users'.
+     */
+    public function hotspotProfiles(): array;
+
+    /**
+     * Create a hotspot user profile.
+     *
+     * @param array<string,string> $attrs Profile attributes. Required: 'name'.
+     *        Optional: 'login-by', 'session-timeout', 'uptime-limit',
+     *        'rate-limit', 'shared-users', 'idle-timeout'.
+     * @return array<string,mixed> The created profile record.
+     */
+    public function addHotspotProfile(array $attrs): array;
+
+    /**
+     * Remove a hotspot profile by its router-assigned id.
+     *
+     * @param string $id Router .id.
+     * @return bool True on success.
+     */
+    public function deleteHotspotProfile(string $id): bool;
 
     /**
      * @return array<int,array<string,mixed>> Currently active hotspot sessions.
