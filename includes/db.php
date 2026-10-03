@@ -168,6 +168,19 @@ SQL);
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_vendo_devices_status ON vendo_devices (status)');
 
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS vendo_rates (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendo_id    INTEGER NOT NULL,
+    coins       INTEGER NOT NULL DEFAULT 1,
+    time_value  INTEGER NOT NULL DEFAULT 15,
+    time_unit   TEXT    NOT NULL DEFAULT 'MIN' CHECK(time_unit IN ('MIN','HRS')),
+    FOREIGN KEY (vendo_id) REFERENCES vendo_devices(id) ON DELETE CASCADE
+)
+SQL);
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_vendo_rates_vendo ON vendo_rates (vendo_id)');
+
     // Migration: add new columns to existing vendo_devices tables that were
     // created before the card-settings refactor.
     $cols = [];

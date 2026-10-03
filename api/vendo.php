@@ -9,7 +9,7 @@
  *
  * Contract:
  *   GET /api/vendo.php
- *   200 {devices:[{id, name, ip, mac, coin_pin, debounce_ms, minutes_per_pulse}, ...]}
+ *   200 {devices:[{id, name, ip, mac, coin_pin, debounce_ms, minutes_per_pulse, rates:[{coins,time_value,time_unit},...]}, ...]}
  *   200 {devices:[]}   when no accepted vendos exist
  *
  * CORS is opened for THIS endpoint only (same rationale as session.php).
@@ -37,6 +37,26 @@ try {
     );
     $rows = $stmt ? $stmt->fetchAll() : [];
 
+    // Fetch rates for all accepted vendos in one query.
+    $ratesByVendo = [];
+    if ($rows !== []) {
+        $ids = array_column($rows, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        try {
+            $rateStmt = $pdo->prepare(
+                "SELECT vendo_id, coins, time_value, time_unit FROM vendo_rates WHERE vendo_id IN ($placeholders) ORDER BY coins ASC"
+            );
+            $rateStmt->execute($ids);
+            while ($rr = $rateStmt->fetch()) {
+                $ratesByVendo[(int) $rr['vendo_id']][] = [
+                    'coins'      => (int) $rr['coins'],
+                    'time_value' => (int) $rr['time_value'],
+                    'time_unit'  => (string) $rr['time_unit'],
+                ];
+            }
+        } catch (Throwable $e) { /* no rates table yet */ }
+    }
+
     $devices = [];
     foreach ($rows as $r) {
         $ip = (string) ($r['assigned_ip'] ?: $r['ip_address'] ?: '');
@@ -47,14 +67,16 @@ try {
             $name = 'Vendo ' . strtoupper(substr((string) $r['mac_address'], -5));
         }
 
+        $vendoId = (int) $r['id'];
         $devices[] = [
-            'id'              => (int) $r['id'],
+            'id'              => $vendoId,
             'name'            => $name,
             'ip'              => $ip,
             'mac'             => (string) $r['mac_address'],
             'coin_pin'        => (int) ($r['coin_pin'] ?? 4),
             'debounce_ms'     => (int) ($r['debounce_ms'] ?? 150),
             'minutes_per_pulse' => (int) ($r['minutes_per_pulse'] ?? 15),
+            'rates'           => $ratesByVendo[$vendoId] ?? [],
         ];
     }
 

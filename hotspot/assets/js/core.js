@@ -63,7 +63,8 @@ function fetchVendoDevices(){
 					eloadEnable: false,
 					coinPin: d.coin_pin,
 					debounceMs: d.debounce_ms,
-					minutesPerPulse: parseInt(d.minutes_per_pulse)
+					minutesPerPulse: parseInt(d.minutes_per_pulse),
+					rates: d.rates || []
 				});
 			}
 
@@ -396,45 +397,52 @@ $('#scanQrModal').on('shown.bs.modal', function (e) {
 	}, 1000);
 })
 
+/**
+ * Populate promo rates modal from SBC API rates (no longer fetched from NodeMCU).
+ * Uses the rates array of the currently selected vendo device.
+ */
 function populatePromoRates(retryCount){
-	$.ajax({
-	  type: "GET",
-	  url: "http://"+vendorIpAddress+"/getRates?rateType="+rateType+"&date="+(new Date().getTime()),
-	  crossOrigin: true,
-	  contentType: 'text/plain',
-	  success: function(data){
-		var rows = data.split("|");
-		var rates = "";
-		for(r in rows){
-			var columns = rows[r].split("#");
-			rates = rates + "<div class='rholder'>";
-			rates = rates + "<div class='rdata'><span>Rate: </span>";
-			rates = rates + columns[0];
-			rates = rates + "</div>";
-			rates = rates + "<div class='rdata'><span style='color: #a3a7ad'>Validity: ";
-			rates = rates + secondsToDhms(parseInt(columns[3])*60);
-			rates = rates + "</span></div>";
-			if(dataRateOption){
-				rates = rates + "<div class='rdata'><span style='color: #a3a7ad'>Data: ";
-				if(columns[4] != ""){
-					rates = rates + columns[4];
-					rates = rates + " MB";
-				}else{
-					rates = rates + "unlimited";
-				}
-				rates = rates + "</span></div>";
-			}
-			rates = rates + "</div>";
+	// Find the selected vendo's rates from the multiVendoAddresses array
+	var vendoRates = [];
+	for(var i = 0; i < multiVendoAddresses.length; i++){
+		if(multiVendoAddresses[i].vendoIp == vendorIpAddress){
+			vendoRates = multiVendoAddresses[i].rates || [];
+			break;
 		}
-		$("#ratesBody").html(rates);
-	  },error: function (jqXHR, exception) {
-		  setTimeout(function() {
-			if(retryCount < 2){
-				populatePromoRates(retryCount+1);
+	}
+
+	// Fallback: if no rates from SBC, build from minutesPerPulse
+	if(vendoRates.length === 0){
+		var mpp = 15;
+		for(var i = 0; i < multiVendoAddresses.length; i++){
+			if(multiVendoAddresses[i].vendoIp == vendorIpAddress){
+				mpp = multiVendoAddresses[i].minutesPerPulse || 15;
+				break;
 			}
-		  }, 1000 );
-	  }
-	});
+		}
+		vendoRates = [
+			{coins:1, time_value:mpp, time_unit:'MIN'},
+			{coins:3, time_value:mpp*3, time_unit:'MIN'},
+			{coins:5, time_value:mpp*5, time_unit:'MIN'},
+			{coins:10, time_value:mpp*10, time_unit:'MIN'}
+		];
+	}
+
+	var rates = "";
+	for(var i = 0; i < vendoRates.length; i++){
+		var r = vendoRates[i];
+		var coinLabel = r.coins + ' coin' + (r.coins > 1 ? 's' : '');
+		// Convert to minutes for secondsToDhms
+		var totalMinutes = r.time_unit === 'HRS' ? r.time_value * 60 : r.time_value;
+		rates = rates + "<div class='rholder'>";
+		rates = rates + "<div class='rdata'><span>Rate: </span>" + coinLabel + "</div>";
+		rates = rates + "<div class='rdata'><span style='color: #a3a7ad'>Validity: " + secondsToDhms(totalMinutes * 60) + "</span></div>";
+		if(dataRateOption){
+			rates = rates + "<div class='rdata'><span style='color: #a3a7ad'>Data: unlimited</span></div>";
+		}
+		rates = rates + "</div>";
+	}
+	$("#ratesBody").html(rates);
 }
 
 $('#chargingModal').on('shown.bs.modal', function (e) {
