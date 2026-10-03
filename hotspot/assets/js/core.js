@@ -41,11 +41,10 @@ function fetchVendoDevices(){
 			$("#vendoSelected").empty();
 
 			if(devices.length === 0){
-				$("#vendoSelectDiv").attr("style", "display: none");
+				$("#vendoSelected").append($('<option>', {value: '', text: 'No vendo available'}));
 				return;
 			}
 
-			$("#vendoSelectDiv").attr("style", "display: block");
 			$("#vendoSelected").append($('<option>', {value: '', text: '-- Select Coin Slot --'}));
 
 			for(var i = 0; i < devices.length; i++){
@@ -81,10 +80,9 @@ function fetchVendoDevices(){
 			$("#vendoSelected").trigger("change");
 		},
 		error: function(){
-			// API unreachable — hide selector, fall back to static config
-			if(multiVendoAddresses.length === 0){
-				$("#vendoSelectDiv").attr("style", "display: none");
-			}
+			// API unreachable — show fallback message, keep dropdown visible
+			$("#vendoSelected").empty();
+			$("#vendoSelected").append($('<option>', {value: '', text: 'No vendo available'}));
 		}
 	});
 }

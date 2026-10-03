@@ -483,10 +483,10 @@
 			<div class="piso-error">$(error)</div>
 			$(endif)
 
-			<!-- Vendo selection (populated by core.js — hidden until devices load) -->
-			<div class="piso-vendo" id="vendoSelectDiv" style="display:none">
+			<!-- Vendo selection (visible by default, hidden only if no devices found) -->
+			<div class="piso-vendo" id="vendoSelectDiv">
 				<label for="vendoSelected">Select Coin Slot</label>
-				<select name="vendoSelected" id="vendoSelected"></select>
+				<select name="vendoSelected" id="vendoSelected"><option value="">Loading...</option></select>
 			</div>
 
 			<!-- Action buttons -->
