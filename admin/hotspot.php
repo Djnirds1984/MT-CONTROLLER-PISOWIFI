@@ -43,6 +43,29 @@ function aircoins_voucher_code(string $prefix, int $len): string
     return $prefix . $code;
 }
 
+/**
+ * Convert minutes to a MikroTik-friendly time string.
+ *
+ * Examples: 10 => "10m", 60 => "1h", 90 => "1h30m", 1440 => "1d".
+ *
+ * @param int $minutes Total minutes (>= 0).
+ * @return string MikroTik time value, empty when $minutes <= 0.
+ */
+function aircoins_minutes_to_time(int $minutes): string
+{
+    if ($minutes <= 0) {
+        return '';
+    }
+    $d = intdiv($minutes, 1440);
+    $h = intdiv($minutes % 1440, 60);
+    $m = $minutes % 60;
+    $parts = [];
+    if ($d > 0) { $parts[] = $d . 'd'; }
+    if ($h > 0) { $parts[] = $h . 'h'; }
+    if ($m > 0) { $parts[] = $m . 'm'; }
+    return implode('', $parts);
+}
+
 // Enabled routers for the selector.
 $routerList = [];
 try {
@@ -88,17 +111,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
     // ---- add single user ---------------------------------------------------
     if ($action === 'add_user') {
-        $name    = trim((string) ($_POST['name'] ?? ''));
-        $pass    = (string) ($_POST['password'] ?? '');
-        $profile = trim((string) ($_POST['profile'] ?? ''));
-        $comment = trim((string) ($_POST['comment'] ?? ''));
+        $name        = trim((string) ($_POST['name'] ?? ''));
+        $pass        = (string) ($_POST['password'] ?? '');
+        $profile     = trim((string) ($_POST['profile'] ?? ''));
+        $comment     = trim((string) ($_POST['comment'] ?? ''));
+        $uptimeMin   = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
+        $uptimeLimit = aircoins_minutes_to_time($uptimeMin);
         if ($name === '' || $pass === '') {
             aircoins_flash('error', 'Username and password are required.');
         } else {
             try {
-                $client->addHotspotUser($name, $pass, $profile, $comment);
-                aircoins_audit($pdo, $adminId, 'hotspot_user_add', 'router #' . $routerId . ' user ' . $name);
-                aircoins_flash('success', 'Hotspot user “' . $name . '” created.');
+                $client->addHotspotUser($name, $pass, $profile, $comment, $uptimeLimit);
+                $msg = 'Hotspot user “' . $name . '” created';
+                if ($uptimeLimit !== '') {
+                    $msg .= ' (session limit ' . $uptimeLimit . ')';
+                }
+                aircoins_audit($pdo, $adminId, 'hotspot_user_add', 'router #' . $routerId . ' user ' . $name . ($uptimeLimit !== '' ? ' uptime=' . $uptimeLimit : ''));
+                aircoins_flash('success', $msg . '.');
             } catch (Throwable $e) {
                 aircoins_flash('error', 'Add user failed: ' . $e->getMessage());
             }
@@ -128,18 +157,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
     // ---- bulk voucher generator -------------------------------------------
     if ($action === 'generate') {
-        $prefix  = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['prefix'] ?? 'AIR')) ?: 'AIR');
-        $count   = max(1, min(200, (int) ($_POST['count'] ?? 1)));
-        $len     = max(4, min(12, (int) ($_POST['code_len'] ?? 6)));
-        $profile = trim((string) ($_POST['profile'] ?? ''));
-        $comment = trim((string) ($_POST['comment'] ?? '')) ?: ('voucher batch ' . date('Y-m-d H:i'));
+        $prefix      = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['prefix'] ?? 'AIR')) ?: 'AIR');
+        $count       = max(1, min(200, (int) ($_POST['count'] ?? 1)));
+        $len         = max(4, min(12, (int) ($_POST['code_len'] ?? 6)));
+        $profile     = trim((string) ($_POST['profile'] ?? ''));
+        $comment     = trim((string) ($_POST['comment'] ?? '')) ?: ('voucher batch ' . date('Y-m-d H:i'));
+        $uptimeMin   = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
+        $uptimeLimit = aircoins_minutes_to_time($uptimeMin);
 
         $created = [];
         $failed  = [];
         for ($i = 0; $i < $count; $i++) {
             $code = aircoins_voucher_code($prefix, $len);
             try {
-                $client->addHotspotUser($code, $code, $profile, $comment);
+                $client->addHotspotUser($code, $code, $profile, $comment, $uptimeLimit);
                 $created[] = $code;
             } catch (Throwable $e) {
                 $failed[] = $code . ' (' . $e->getMessage() . ')';
@@ -151,13 +182,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
 
         $_SESSION['aircoins_vouchers'] = [
-            'created' => $created,
-            'failed'  => $failed,
-            'profile' => $profile,
-            'router'  => (string) $router['name'],
+            'created'      => $created,
+            'failed'       => $failed,
+            'profile'      => $profile,
+            'router'       => (string) $router['name'],
+            'uptime_limit' => $uptimeLimit,
         ];
         aircoins_audit($pdo, $adminId, 'hotspot_voucher_generate',
-            'router #' . $routerId . ' generated ' . count($created) . '/' . $count . ' vouchers (profile ' . ($profile !== '' ? $profile : 'default') . ')');
+            'router #' . $routerId . ' generated ' . count($created) . '/' . $count . ' vouchers (profile ' . ($profile !== '' ? $profile : 'default') . ($uptimeLimit !== '' ? ', uptime=' . $uptimeLimit : '') . ')');
         if ($created === []) {
             aircoins_flash('error', 'No vouchers created' . ($failed !== [] ? ': ' . $failed[0] : '.'));
         } else {
@@ -280,7 +312,7 @@ aircoins_header('Hotspot', 'hotspot');
         <div class="card__head">
           <h2 class="card__title">Generated vouchers</h2>
           <div class="spacer"></div>
-          <span class="hint"><?php echo count($voucherResult['created']); ?> codes · profile <?php echo e($voucherResult['profile'] !== '' ? $voucherResult['profile'] : 'default'); ?> · <?php echo e($voucherResult['router']); ?></span>
+          <span class="hint"><?php echo count($voucherResult['created']); ?> codes · profile <?php echo e($voucherResult['profile'] !== '' ? $voucherResult['profile'] : 'default'); ?><?php echo (!empty($voucherResult['uptime_limit'])) ? ' · session ' . e($voucherResult['uptime_limit']) : ''; ?> · <?php echo e($voucherResult['router']); ?></span>
         </div>
         <div class="card__body">
           <div class="row" style="gap:8px;flex-wrap:wrap">
@@ -315,6 +347,22 @@ aircoins_header('Hotspot', 'hotspot');
             <div class="field">
               <label for="u-profile">Profile</label>
               <input class="input" id="u-profile" name="profile" type="text" placeholder="default">
+            </div>
+            <div class="field">
+              <label for="u-uptime">Session time</label>
+              <select class="select" id="u-uptime" name="uptime_minutes">
+                <option value="0">No limit (use profile)</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="180">3 hours</option>
+                <option value="300">5 hours</option>
+                <option value="360">6 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1440">24 hours (1 day)</option>
+              </select>
             </div>
             <div class="field">
               <label for="u-comment">Comment</label>
@@ -354,10 +402,26 @@ aircoins_header('Hotspot', 'hotspot');
               </div>
             </div>
             <div class="field">
+              <label for="v-uptime">Session time</label>
+              <select class="select" id="v-uptime" name="uptime_minutes">
+                <option value="0">No limit (use profile)</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="180">3 hours</option>
+                <option value="300">5 hours</option>
+                <option value="360">6 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1440">24 hours (1 day)</option>
+              </select>
+            </div>
+            <div class="field">
               <label for="v-comment">Comment</label>
               <input class="input" id="v-comment" name="comment" type="text" placeholder="voucher batch">
             </div>
-            <p class="hint">Format: <code data-voucher-preview>AIRXXXXXX</code> — each code is used as both username and password.</p>
+            <p class="hint">Format: <code data-voucher-preview>AIRXXXXXX</code> — each code is used as both username and password. Session time is set as the uptime-limit on the MikroTik user.</p>
             <button class="btn btn--primary btn--block" type="submit"
                     data-confirm="Generate and push these vouchers to the router now?">Generate vouchers</button>
           </form>
@@ -378,13 +442,14 @@ aircoins_header('Hotspot', 'hotspot');
         <?php else: ?>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>.id</th><th>Name</th><th>Profile</th><th>Comment</th><th>State</th><th class="actions">Actions</th></tr></thead>
+              <thead><tr><th>.id</th><th>Name</th><th>Profile</th><th>Session Limit</th><th>Comment</th><th>State</th><th class="actions">Actions</th></tr></thead>
               <tbody>
               <?php foreach ($users as $u): ?>
                 <tr>
                   <td class="mono"><?php echo e((string) ($u['.id'] ?? '')); ?></td>
                   <td><strong><?php echo e((string) ($u['name'] ?? '')); ?></strong></td>
                   <td><?php echo e((string) ($u['profile'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($u['uptime-limit'] ?? '')); ?></td>
                   <td class="hint"><?php echo e((string) ($u['comment'] ?? '')); ?></td>
                   <td>
                     <?php if (!empty($u['disabled'])): ?>

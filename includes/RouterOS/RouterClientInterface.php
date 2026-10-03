@@ -47,19 +47,21 @@ interface RouterClient
 
     /**
      * @return array<int,array<string,mixed>> All hotspot users.
+     *   Each entry: '.id', 'name', 'profile', 'comment', 'uptime-limit', 'disabled'.
      */
     public function hotspotUsers(): array;
 
     /**
      * Create a hotspot user (voucher).
      *
-     * @param string $name    Username.
-     * @param string $pass    Password.
-     * @param string $profile Hotspot profile name.
-     * @param string $comment Optional comment.
+     * @param string $name         Username.
+     * @param string $pass         Password.
+     * @param string $profile      Hotspot profile name.
+     * @param string $comment      Optional comment.
+     * @param string $uptimeLimit  Optional session time limit (MikroTik time format, e.g. "1h", "30m", "1h30m").
      * @return array<string,mixed> The created user record.
      */
-    public function addHotspotUser(string $name, string $pass, string $profile, string $comment = ''): array;
+    public function addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array;
 
     /**
      * Remove a hotspot user by its router-assigned id (e.g. "*5").

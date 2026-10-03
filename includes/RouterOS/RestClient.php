@@ -92,22 +92,26 @@ class RestClient implements RouterClient
         $out  = [];
         foreach (self::asList($rows) as $r) {
             $out[] = [
-                '.id'      => (string) ($r['.id'] ?? ''),
-                'name'     => (string) ($r['name'] ?? ''),
-                'profile'  => (string) ($r['profile'] ?? ''),
-                'comment'  => (string) ($r['comment'] ?? ''),
-                'disabled' => self::toBool($r['disabled'] ?? false),
+                '.id'          => (string) ($r['.id'] ?? ''),
+                'name'         => (string) ($r['name'] ?? ''),
+                'profile'      => (string) ($r['profile'] ?? ''),
+                'comment'      => (string) ($r['comment'] ?? ''),
+                'uptime-limit' => (string) ($r['uptime-limit'] ?? ''),
+                'disabled'     => self::toBool($r['disabled'] ?? false),
             ];
         }
         return $out;
     }
 
     /** @inheritDoc */
-    public function addHotspotUser(string $name, string $pass, string $profile, string $comment = ''): array
+    public function addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array
     {
         $body = ['name' => $name, 'password' => $pass, 'profile' => $profile];
         if ($comment !== '') {
             $body['comment'] = $comment;
+        }
+        if ($uptimeLimit !== '') {
+            $body['uptime-limit'] = $uptimeLimit;
         }
         $d = $this->put('/ip/hotspot/user', $body);
         return [

@@ -264,8 +264,15 @@
     var count = form.querySelector('[name="count"]');
     var prefix = form.querySelector('[name="prefix"]');
     var len = form.querySelector('[name="code_len"]');
+    var uptime = form.querySelector('[name="uptime_minutes"]');
     var out = form.querySelector('[data-voucher-preview]');
-
+  
+    var uptimeLabels = {
+      '0': 'no limit', '10': '10m', '15': '15m', '30': '30m',
+      '60': '1h', '120': '2h', '180': '3h', '300': '5h',
+      '360': '6h', '720': '12h', '1440': '1d'
+    };
+  
     function refresh() {
       if (count) {
         var c = parseInt(count.value, 10);
@@ -276,10 +283,11 @@
         var p = (prefix && prefix.value) ? prefix.value : 'AIR';
         var n = (count && count.value) ? count.value : '1';
         var l = (len && len.value) ? len.value : '6';
-        out.textContent = p + 'XXXXXX (× ' + n + ', ' + l + '-char code)';
+        var u = uptime ? (uptimeLabels[uptime.value] || uptime.value + 'm') : '1h';
+        out.textContent = p + 'XXXXXX (\u00d7 ' + n + ', ' + l + '-char, ' + u + ' session)';
       }
     }
-    [count, prefix, len].forEach(function (el) { if (el) { el.addEventListener('input', refresh); } });
+    [count, prefix, len, uptime].forEach(function (el) { if (el) { el.addEventListener('input', refresh); } });
     refresh();
   }
 
