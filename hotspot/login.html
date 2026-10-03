@@ -366,16 +366,31 @@
 			/* ---- EXTERNAL MODE (served by SBC lighttpd): HTTP-PAP real form navigation ---- */
 			if (window.PORTAL && PORTAL.external) {
 				var vExt = document.getElementById('voucherInput') ? document.getElementById('voucherInput').value : '';
+				if (vExt === '') { return false; }
+				/* The sendin form lives inside $(if chap-id) which varbridge strips in
+				   external mode. Build it on-the-fly so the PAP POST always has a target. */
 				var fExt = document.sendin;
-				if (fExt) {
-					fExt.username.value = vExt;
-					fExt.password.value = vExt;                 /* PAP: plaintext voucher as both user + pass */
-					fExt.dst.value = PORTAL.statusUrl() + '&voucher=' + encodeURIComponent(vExt);
-					if (fExt.popup) { fExt.popup.value = 'false'; }   /* no popup: top-level navigation */
-					if (PORTAL.params.login) { fExt.action = PORTAL.params.login; }
-					fExt.submit();                              /* real navigation -> router login URL (avoids CORS) */
+				if (!fExt) {
+					fExt = document.createElement('form');
+					fExt.name = 'sendin';
+					fExt.method = 'post';
+					fExt.style.display = 'none';
+					fExt.action = PORTAL.params.login || '';
+					var mkInput = function(n, v) {
+						var el = document.createElement('input');
+						el.type = 'hidden'; el.name = n; el.value = v || '';
+						fExt.appendChild(el);
+					};
+					mkInput('username'); mkInput('password'); mkInput('dst'); mkInput('popup', 'false');
+					document.body.appendChild(fExt);
 				}
-				return false;                                   /* skip the router-native CHAP path below */
+				fExt.username.value = vExt;
+				fExt.password.value = vExt;                 /* PAP: plaintext voucher as both user + pass */
+				fExt.dst.value = PORTAL.statusUrl() + '&voucher=' + encodeURIComponent(vExt);
+				if (fExt.popup) { fExt.popup.value = 'false'; }   /* no popup: top-level navigation */
+				if (PORTAL.params.login) { fExt.action = PORTAL.params.login; }
+				fExt.submit();                              /* real navigation -> router login URL (avoids CORS) */
+				return false;                               /* skip the router-native CHAP path below */
 			}
 			/* ---- ROUTER-NATIVE MODE (served by MikroTik): CHAP challenge-response ---- */
 			var vc = $("#voucherInput").val();
