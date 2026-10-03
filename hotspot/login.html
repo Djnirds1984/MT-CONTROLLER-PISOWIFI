@@ -366,11 +366,13 @@
 			/* Voucher login: use the same CHAP flow as member login.
 			   The voucher code is both username and password.
 			   When the voucher input is empty, auto-use the device MAC
-			   (without colons) so devices with admin-set session time
-			   can authenticate by just pressing SUBMIT. */
+			   (without colons, lowercase) as the username with an EMPTY
+			   password — the hotspot user was created with no password
+			   so the CHAP hash of '' matches on both sides. */
 			var vc = document.getElementById('voucherInput') ? document.getElementById('voucherInput').value : '';
-			if (vc === '') {
-				vc = replaceAll(mac, ":");
+			var isMacLogin = (vc === '');
+			if (isMacLogin) {
+				vc = replaceAll(mac, ":").toLowerCase();
 				if (vc === '') { return false; }
 			}
 			if( macAsVoucherCode && vc == "" ){
@@ -399,7 +401,11 @@
 				
 			}
             document.sendin.username.value = vc;
-			if(loginOption == 0){
+			if(isMacLogin){
+				/* Device MAC auth: hotspot user has EMPTY password,
+				   so CHAP hash must use empty string. */
+				document.sendin.password.value = hexMD5('$(chap-id)' + '' + '$(chap-challenge)');
+			}else if(loginOption == 0){
 				document.sendin.password.value = hexMD5('$(chap-id)' + "" + '$(chap-challenge)');
 			}else{
 				document.sendin.password.value = hexMD5('$(chap-id)' + vc + '$(chap-challenge)');

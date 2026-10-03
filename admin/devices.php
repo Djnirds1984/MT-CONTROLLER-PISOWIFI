@@ -186,8 +186,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if ($router) {
                     try {
                         $client = aircoins_router_client($router);
-                        // MAC without colons, UPPERCASE — must match what login.html sends.
-                        $macUser = str_replace(':', '', strtoupper($mac));
+                        // MAC without colons, LOWERCASE — RouterOS normalises MAC
+                        // names to lowercase internally; the hotspot user MUST
+                        // match what the portal sends after toLowerCase().
+                        $macUser = str_replace(':', '', strtolower($mac));
                         // List first, remove any existing user with this MAC,
                         // then create fresh — avoids "already have user" trap.
                         $allUsers = $client->hotspotUsers();
@@ -197,7 +199,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                                 break;
                             }
                         }
-                        $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
+                        // Password is EMPTY — the portal sends MAC as username
+                        // with empty password; CHAP hash of '' matches on both sides.
+                        $client->addHotspotUser($macUser, '', '', 'device ' . $mac, $sessTime);
                         $pushMsg = ' Session time pushed to router (' . $sessTime . ').';
                     } catch (Throwable $re) {
                         $pushMsg = ' (Router push failed: ' . $re->getMessage() . ')';
@@ -295,10 +299,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         try {
             $client  = aircoins_router_client($devRouter);
-            // MAC without colons, UPPERCASE — must match what login.html sends
-            // as the username ($(mac) from MikroTik is uppercase; doLogin()
-            // strips colons and submits that as both user and pass).
-            $macUser = str_replace(':', '', strtoupper($mac));
+            // MAC without colons, LOWERCASE — RouterOS normalises MAC names
+            // to lowercase internally; the hotspot user MUST match what the
+            // portal sends after toLowerCase().
+            $macUser = str_replace(':', '', strtolower($mac));
 
             // Calculate the new total limit.
             // Read the current limit-uptime from the DB session_time (which
@@ -320,7 +324,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     break;
                 }
             }
-            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
+            // Password is EMPTY — device authenticates with MAC username only.
+            $client->addHotspotUser($macUser, '', '', 'device ' . $mac, $newLimit);
 
             // Update DB session_time too.
             $newLimitDisplay = aircoins_seconds_to_time($addSeconds);
