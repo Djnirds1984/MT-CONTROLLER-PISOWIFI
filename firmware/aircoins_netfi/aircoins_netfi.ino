@@ -479,7 +479,7 @@ void handleStatus() {
   json += "\"ssid\":\""       + jsonEscape(WiFi.SSID()) + "\",";
   json += "\"rssi\":"         + String(WiFi.RSSI()) + ",";
   json += "\"uptime_ms\":"    + String(millis()) + ",";
-  json += "\"connected\":"    + ((WiFi.status() == WL_CONNECTED) ? "true" : "false") + ",";
+  json += "\"connected\":"    + String((WiFi.status() == WL_CONNECTED) ? "true" : "false") + ",";
   json += "\"setup_mode\":false";
   json += "}";
   server.send(200, "application/json", json);
@@ -634,7 +634,8 @@ void normalModeInit() {
 
   WiFi.mode(WIFI_STA);
   // Set hostname to "vendo-XXXX" (last 2 MAC bytes) for DHCP discovery
-  String hostname = "vendo-" + WiFi.macAddress().substring(12, 17).replace(":", "");
+  String hostname = "vendo-" + WiFi.macAddress().substring(12, 17);
+  hostname.replace(":", "");
   WiFi.hostname(hostname.c_str());
   WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
 
