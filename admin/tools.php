@@ -111,7 +111,7 @@ const AIRCOINS_STUBS = [
 // ---------------------------------------------------------------------------
 // Load routers for the selector
 // ---------------------------------------------------------------------------
-$routers = $pdo->query('SELECT id, name, host, api_type, api_port, enabled FROM routers ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$routers = $pdo->query('SELECT id, name, host, api_type, api_port FROM routers WHERE disabled = 0 ORDER BY name COLLATE NOCASE ASC')->fetchAll(PDO::FETCH_ASSOC);
 
 // ---------------------------------------------------------------------------
 // POST handlers
