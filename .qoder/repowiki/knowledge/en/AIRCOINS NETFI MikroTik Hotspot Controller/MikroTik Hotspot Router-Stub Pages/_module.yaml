@@ -1,10 +1,11 @@
 schema_version: 1
-module_path: shared_includes
-title: AIRCOINS Shared Runtime Includes
+module_path: router_stubs
+title: MikroTik Hotspot Router-Stub Pages
 scope:
-    - includes/
+    - router-stubs/
 source_files: []
 depends_on: []
 related_to:
     - path: admin_panel
+    - path: deployment
     - path: hotspot_portal

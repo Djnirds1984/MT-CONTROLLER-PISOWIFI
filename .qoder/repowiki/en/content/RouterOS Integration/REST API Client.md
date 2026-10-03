@@ -11,6 +11,12 @@
 - [hotspot.php](file://admin/hotspot.php)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated attribute naming conventions for RouterOS API compatibility
+- Corrected hotspot profile endpoint paths for RouterOS v7 compatibility
+- Enhanced documentation for API version compatibility considerations
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -78,7 +84,7 @@ Key responsibilities:
 - [RouterFactory.php:29-54](file://includes/RouterOS/RouterFactory.php#L29-L54)
 
 ## Architecture Overview
-At runtime, callers request a `RouterClient` from the factory. For REST routers, this returns `RestClient`, which uses cURL to send authenticated JSON requests to the router’s `/rest` endpoint. Responses are decoded JSON and normalized into consistent arrays.
+At runtime, callers request a `RouterClient` from the factory. For REST routers, this returns `RestClient`, which uses cURL to send authenticated JSON requests to the router's `/rest` endpoint. Responses are decoded JSON and normalized into consistent arrays.
 
 ```mermaid
 sequenceDiagram
@@ -112,7 +118,7 @@ Client-->>Caller : list of hotspot users
 - Public methods implement the `RouterClient` contract:
   - `testConnection()`: reads identity and resource endpoints to validate reachability and credentials.
   - `identity()` and `resource()`: read `/system/identity` and `/system/resource`.
-  - Hotspot user/profile CRUD: `/ip/hotspot/user` and `/ip/hotspot/profile`.
+  - Hotspot user/profile CRUD: `/ip/hotspot/user` and `/ip/hotspot/user/profile`.
   - Active session queries and kick: `/ip/hotspot/active`.
   - Interface listing with traffic counters: `/interface`.
   - MAC-based session lookup: `/ip/hotspot/active?mac=...`.
@@ -186,7 +192,7 @@ RouterClient <|.. RestClient : "implements"
 
 **Diagram sources**
 - [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:24-457](file://includes/RouterOS/RestClient.php#L24-L457)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
 
 #### HTTP Request Construction Flow
 ```mermaid
@@ -245,9 +251,9 @@ Recommended practice:
   - Add user: PUT `/ip/hotspot/user` with JSON body containing name, password, profile, and optional fields.
   - Delete user: DELETE `/ip/hotspot/user/.id`.
 - Profile management:
-  - List profiles: GET `/ip/hotspot/profile`.
-  - Add profile: PUT `/ip/hotspot/profile` with JSON attributes.
-  - Delete profile: DELETE `/ip/hotspot/profile/.id`.
+  - List profiles: GET `/ip/hotspot/user/profile`.
+  - Add profile: PUT `/ip/hotspot/user/profile` with JSON attributes.
+  - Delete profile: DELETE `/ip/hotspot/user/profile/.id`.
 - Session control:
   - List active sessions: GET `/ip/hotspot/active`.
   - Kick session: DELETE `/ip/hotspot/active/.id`.
@@ -258,6 +264,8 @@ Recommended practice:
   - Interfaces: GET `/interface` with property list.
 - Commands:
   - Execute commands via POST with JSON payload, e.g., traffic monitoring.
+
+**Updated** Endpoint paths have been corrected to use `/ip/hotspot/user/profile` instead of `/ip/hotspot/profile` for RouterOS v7 compatibility.
 
 **Section sources**
 - [RestClient.php:67-86](file://includes/RouterOS/RestClient.php#L67-L86)
@@ -348,7 +356,7 @@ Symptoms:
 - Self-signed certificates cause verification errors.
 
 Checks:
-- Ensure the router’s www-ssl service is enabled and reachable on the configured port.
+- Ensure the router's www-ssl service is enabled and reachable on the configured port.
 - Verify `tls_verify` setting matches your certificate setup.
 - Prefer CA-signed certificates in production; disable verification only for internal/self-signed environments.
 
@@ -387,7 +395,11 @@ Symptoms:
 Checks:
 - Confirm the router supports REST API v7 and that the selected API type is `rest`.
 - Validate that endpoints like `/ip/hotspot/user` and `/system/resource` exist on the target device.
-- Use the admin panel’s auto-detect feature to verify connectivity and version.
+- Use the admin panel's auto-detect feature to verify connectivity and version.
+
+**Updated** RouterOS API compatibility fixes have been applied:
+- Attribute names corrected from `uptime-limit` to `limit-uptime` for hotspot user operations
+- Endpoint paths updated from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for profile operations
 
 Relevant behavior:
 - The factory selects REST when `api_type` is `rest`.
@@ -422,6 +434,6 @@ Best practices:
 - [RestClient.php:288-289](file://includes/RouterOS/RestClient.php#L288-L289)
 
 ## Conclusion
-The REST API client provides a clean, secure, and consistent way to manage MikroTik RouterOS v7 devices through HTTPS. By implementing a unified interface, it allows the admin panel and portal to operate across different router implementations without coupling to transport details. Proper TLS configuration, robust error handling, and clear endpoint mappings make it suitable for hotspot user management, session control, and system monitoring. For enhanced reliability, callers may add retry logic and caching around the client’s operations.
+The REST API client provides a clean, secure, and consistent way to manage MikroTik RouterOS v7 devices through HTTPS. By implementing a unified interface, it allows the admin panel and portal to operate across different router implementations without coupling to transport details. Proper TLS configuration, robust error handling, and clear endpoint mappings make it suitable for hotspot user management, session control, and system monitoring. Recent RouterOS API compatibility fixes ensure proper attribute naming and endpoint path resolution for optimal RouterOS v7 integration. For enhanced reliability, callers may add retry logic and caching around the client's operations.
 
 [No sources needed since this section summarizes without analyzing specific files]

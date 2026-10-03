@@ -76,8 +76,8 @@ interface RouterClient
 
     /**
      * @return array<int,array<string,mixed>> All hotspot user profiles.
-     *   Each entry: '.id', 'name', 'login-by', 'session-timeout',
-     *   'uptime-limit', 'rate-limit', 'shared-users'.
+     *   Each entry: '.id', 'name', 'rate-limit', 'session-timeout',
+     *   'uptime-limit', 'shared-users', 'idle-timeout'.
      */
     public function hotspotProfiles(): array;
 
@@ -124,4 +124,27 @@ interface RouterClient
      * @return array<string,mixed>|null The matching session or null when absent.
      */
     public function findActiveByMac(string $mac): ?array;
+
+    /**
+     * Upload a file to the router's filesystem (e.g. hotspot stub pages).
+     *
+     * Used by the Tools page to push the correct thin router-stub files
+     * (login.html, alogin.html, error.html, logout.html) to the router,
+     * replacing any full portal files that break the external-mode login.
+     *
+     * @param string $path    Router-side path, e.g. "flash/hotspot/login.html".
+     * @param string $content Raw file content (the client encodes as needed).
+     * @return bool True on success.
+     * @throws RuntimeException When the upload fails.
+     */
+    public function uploadHotspotStub(string $path, string $content): bool;
+
+    /**
+     * List files on the router's filesystem under a given directory.
+     *
+     * @param string $dir Directory path, e.g. "flash/hotspot".
+     * @return array<int,array<string,mixed>> Each entry: 'name', 'type', 'size'.
+     * @throws RuntimeException When the listing fails.
+     */
+    public function listFiles(string $dir): array;
 }

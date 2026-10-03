@@ -8,6 +8,12 @@
 - [RouterFactory.php](file://includes/RouterOS/RouterFactory.php)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated hotspot user attribute documentation to reflect corrected naming from 'uptime-limit' to 'limit-uptime'
+- Added clarification about MikroTik API attribute naming conventions
+- Enhanced method signature reference with accurate attribute names
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -54,9 +60,9 @@ LA --> IF
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:24-258](file://includes/RouterOS/RestClient.php#L24-L258)
-- [LegacyApiClient.php:22-430](file://includes/RouterOS/LegacyApiClient.php#L22-L430)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
 **Section sources**
@@ -78,10 +84,12 @@ Key responsibilities:
 - Error handling: consistent RuntimeException usage across implementations
 - Data normalization: converting raw API responses into stable shapes expected by consumers
 
+**Updated** Corrected hotspot user attribute naming from 'uptime-limit' to 'limit-uptime' to match MikroTik API specifications
+
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:24-258](file://includes/RouterOS/RestClient.php#L24-L258)
-- [LegacyApiClient.php:22-430](file://includes/RouterOS/LegacyApiClient.php#L22-L430)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
 ## Architecture Overview
@@ -107,6 +115,7 @@ class RouterClient {
 +kickSession(id) bool
 +interfaces() array
 +findActiveByMac(mac) array|null
++uploadHotspotStub(path, content) bool
 }
 class RestClient {
 -host string
@@ -152,9 +161,9 @@ RouterFactory --> LegacyApiClient : "creates otherwise"
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:24-258](file://includes/RouterOS/RestClient.php#L24-L258)
-- [LegacyApiClient.php:22-430](file://includes/RouterOS/LegacyApiClient.php#L22-L430)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
 ## Detailed Component Analysis
@@ -168,12 +177,14 @@ Core method categories:
 - Hotspot profile management: hotspotProfiles, addHotspotProfile, deleteHotspotProfile
 - Session management: activeSessions, kickSession, findActiveByMac
 - Network monitoring: interfaces
+- File management: uploadHotspotStub
 
 Return value conventions:
 - Lists are arrays of associative arrays with consistent keys
 - Booleans are coerced from RouterOS string representations
 - Uptime is normalized to seconds
 - Optional fields use safe defaults when missing
+- **Updated** Hotspot user records include 'limit-uptime' attribute (not 'uptime-limit') to match MikroTik API specifications
 
 Exception handling:
 - Methods may throw RuntimeException for network failures, authentication errors, or invalid responses
@@ -192,12 +203,12 @@ ReturnResult --> End(["Method Exit"])
 ```
 
 **Diagram sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [RestClient.php:54-222](file://includes/RouterOS/RestClient.php#L54-L222)
-- [LegacyApiClient.php:429-599](file://includes/RouterOS/LegacyApiClient.php#L429-L599)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+- [RestClient.php:54-471](file://includes/RouterOS/RestClient.php#L54-L471)
+- [LegacyApiClient.php:429-677](file://includes/RouterOS/LegacyApiClient.php#L429-L677)
 
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
 
 ### RestClient Implementation
 The RestClient implements RouterClient using RouterOS v7 REST API over HTTPS with HTTP Basic authentication and JSON payloads.
@@ -221,6 +232,7 @@ Data normalization:
 - Converts string values to appropriate PHP types (float, int, bool)
 - Parses RouterOS uptime format to seconds
 - Normalizes boolean-like strings ("true", "yes", "1") to PHP booleans
+- **Updated** Uses 'limit-uptime' attribute for hotspot user creation and retrieval
 
 ```mermaid
 sequenceDiagram
@@ -244,10 +256,10 @@ Client-->>Caller : {ok, name, version, board-name}
 
 **Diagram sources**
 - [RestClient.php:54-86](file://includes/RouterOS/RestClient.php#L54-L86)
-- [RestClient.php:270-316](file://includes/RouterOS/RestClient.php#L270-L316)
+- [RestClient.php:270-471](file://includes/RouterOS/RestClient.php#L270-L471)
 
 **Section sources**
-- [RestClient.php:24-459](file://includes/RouterOS/RestClient.php#L24-L459)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
 
 ### LegacyApiClient Implementation
 The LegacyApiClient implements RouterClient using the RouterOS binary "sentence" protocol over TCP (8728) or TLS (8729).
@@ -275,6 +287,7 @@ Additional capabilities:
 - writeSentence(), readSentence(), parseSentence() for low-level protocol interaction
 - cmd() method for sending commands and collecting records
 - exec() internal method returning both records and done attributes
+- **Updated** Uses 'limit-uptime' attribute for hotspot user creation and retrieval
 
 ```mermaid
 sequenceDiagram
@@ -304,7 +317,7 @@ Client-->>Caller : Authenticated
 - [LegacyApiClient.php:101-167](file://includes/RouterOS/LegacyApiClient.php#L101-L167)
 
 **Section sources**
-- [LegacyApiClient.php:22-667](file://includes/RouterOS/LegacyApiClient.php#L22-L667)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
 
 ### Factory Function
 The aircoins_router_client factory function provides centralized client instantiation with secure credential handling.
@@ -359,7 +372,7 @@ Potential circular dependencies:
 - Factory depends on both implementations but they don't depend on the factory
 
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
 - [RestClient.php:22-25](file://includes/RouterOS/RestClient.php#L22-L25)
 - [LegacyApiClient.php:20-23](file://includes/RouterOS/LegacyApiClient.php#L20-L23)
 - [RouterFactory.php:12-15](file://includes/RouterOS/RouterFactory.php#L12-L15)
@@ -404,6 +417,7 @@ Data parsing errors:
 - Invalid RouterOS responses cause parsing exceptions
 - Missing fields handled with safe defaults to prevent crashes
 - Type coercion ensures consistent return formats
+- **Updated** Attribute naming mismatches (e.g., 'uptime-limit' vs 'limit-uptime') should be resolved by using the correct MikroTik API attribute names
 
 Debugging strategies:
 - Enable detailed logging in development environments
@@ -436,19 +450,22 @@ Complete method signatures that implementers must follow:
 - testConnection(): array - Probes router reachability and credentials
 - identity(): array - Returns router identity information  
 - resource(): array - Returns system resource statistics
-- hotspotUsers(): array - Lists all hotspot users
-- addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array - Creates new hotspot user
+- hotspotUsers(): array - Lists all hotspot users with 'limit-uptime' attribute (not 'uptime-limit')
+- addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array - Creates new hotspot user with 'limit-uptime' attribute
 - deleteHotspotUser(string $id): bool - Removes hotspot user by ID
-- hotspotProfiles(): array - Lists all hotspot profiles
+- hotspotProfiles(): array - Lists all hotspot profiles with 'uptime-limit' attribute
 - addHotspotProfile(array $attrs): array - Creates new hotspot profile
 - deleteHotspotProfile(string $id): bool - Removes hotspot profile by ID
 - activeSessions(): array - Lists currently active sessions
 - kickSession(string $id): bool - Disconnects active session by ID
 - interfaces(): array - Lists router interfaces with traffic counters
 - findActiveByMac(string $mac): ?array - Finds active session by MAC address
+- uploadHotspotStub(string $path, string $content): bool - Uploads hotspot stub files
+
+**Updated** Corrected hotspot user attribute naming from 'uptime-limit' to 'limit-uptime' to match MikroTik API specifications
 
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
 
 ### Testing with Mock Implementations
 To test code that uses RouterClient, create a mock implementation:
@@ -468,4 +485,26 @@ Benefits of this approach:
 - Isolation from external system changes
 
 **Section sources**
-- [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
+- [RouterClientInterface.php:31-142](file://includes/RouterOS/RouterClientInterface.php#L31-L142)
+
+### MikroTik API Attribute Naming Conventions
+Important attribute naming conventions for RouterOS API:
+
+**Hotspot User Attributes:**
+- `limit-uptime` - Per-user session time limit (correct attribute name)
+- NOT `uptime-limit` - This was an incorrect naming convention
+
+**Hotspot Profile Attributes:**
+- `uptime-limit` - Profile-level uptime limit (correct attribute name)
+- `session-timeout` - Session timeout configuration
+- `rate-limit` - Bandwidth rate limiting
+- `shared-users` - Number of concurrent users allowed
+- `idle-timeout` - Idle timeout configuration
+
+**Note:** The distinction between `limit-uptime` (for individual users) and `uptime-limit` (for profiles) is crucial for proper RouterOS API communication.
+
+**Section sources**
+- [RestClient.php:99-114](file://includes/RouterOS/RestClient.php#L99-L114)
+- [LegacyApiClient.php:476-491](file://includes/RouterOS/LegacyApiClient.php#L476-L491)
+- [RestClient.php:145-157](file://includes/RouterOS/RestClient.php#L145-L157)
+- [LegacyApiClient.php:522-534](file://includes/RouterOS/LegacyApiClient.php#L522-L534)

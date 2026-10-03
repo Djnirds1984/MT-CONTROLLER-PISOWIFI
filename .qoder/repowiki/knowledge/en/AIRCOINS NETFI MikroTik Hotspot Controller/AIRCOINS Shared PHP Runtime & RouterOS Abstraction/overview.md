@@ -1,0 +1,1 @@
+Shared PHP runtime for the AIRCOINS NETFI controller: global configuration, SQLite persistence, auth/session/CSRF/crypto helpers, admin layout, and a unified RouterOS client abstraction over REST and legacy binary transports.

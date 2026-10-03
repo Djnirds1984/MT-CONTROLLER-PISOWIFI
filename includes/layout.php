@@ -89,6 +89,7 @@ function aircoins_header(string $title, string $active = ''): void
         'dashboard' => ['index.php', 'Dashboard', 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z'],
         'routers'   => ['routers.php', 'Routers', 'M4 6h16v4H4V6Zm0 8h16v4H4v-4Zm2-6h2v2H6V8Zm0 8h2v2H6v-2Z'],
         'hotspot'   => ['hotspot.php', 'Hotspot', 'M12 3a9 9 0 0 0-9 9h2a7 7 0 1 1 14 0h2a9 9 0 0 0-9-9Zm0 5a4 4 0 0 0-4 4h2a2 2 0 1 1 4 0h2a4 4 0 0 0-4-4Zm0 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z'],
+        'tools'     => ['tools.php', 'Tools', 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4Z'],
     ];
     ?><!DOCTYPE html>
 <html lang="en">

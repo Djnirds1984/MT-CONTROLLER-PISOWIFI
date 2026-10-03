@@ -455,4 +455,31 @@ class RestClient implements RouterClient
         }
         return $total;
     }
+
+    /** @inheritDoc */
+    public function uploadHotspotStub(string $path, string $content): bool
+    {
+        // RouterOS REST /file expects base64-encoded contents.
+        $body = [
+            'name'     => $path,
+            'contents' => base64_encode($content),
+        ];
+        $this->put('/file', $body);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function listFiles(string $dir): array
+    {
+        $rows = $this->get('/file', 'name~' . $dir);
+        $out  = [];
+        foreach (self::asList($rows) as $r) {
+            $out[] = [
+                'name' => (string) ($r['name'] ?? ''),
+                'type' => (string) ($r['type'] ?? ''),
+                'size' => (int) ($r['size'] ?? 0),
+            ];
+        }
+        return $out;
+    }
 }

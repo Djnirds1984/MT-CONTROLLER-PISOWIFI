@@ -1,0 +1,5 @@
+- All PHP code lives under includes/ and is pulled in via relative require_once paths from sibling docroots (admin/*.php use ../includes/..., api/session.php uses ../includes/...), keeping the deployed app/ tree flat.
+- Router access goes through the RouterOS/ abstraction (RouterClientInterface implemented by RestClient and LegacyApiClient, selected by RouterFactory); direct cURL/socket calls against the router are not used outside these classes.
+- Sensitive data is never stored in plaintext: admin passwords are hashed with Argon2id via aircoins_hash(), router passwords are encrypted with libsodium XSalsa20-Poly1305 before SQLite storage, and the 32-byte secret key is read from /etc/aircoins/secret.key at runtime.
+- Every state-changing admin POST carries a per-session CSRF token verified with hash_equals; all output is escaped and all SQL queries use prepared statements.
+- Router-facing HTML files use RouterOS template tags ($(mac-esc), $(link-login-only-esc), etc.) so the same page works both when served by the router (server-side substitution) and by the SBC (client-side filling via js/varbridge.js).

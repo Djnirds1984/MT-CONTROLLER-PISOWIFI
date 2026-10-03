@@ -663,4 +663,29 @@ class LegacyApiClient implements RouterClient
         }
         return $total;
     }
+
+    /** @inheritDoc */
+    public function uploadHotspotStub(string $path, string $content): bool
+    {
+        // Legacy binary API: send raw content via /file command.
+        // The binary sentence protocol handles arbitrary bytes via length-prefix
+        // encoding, so no hex/base64 wrapping is needed.
+        $this->exec('/file', ['name' => $path, 'contents' => $content]);
+        return true;
+    }
+
+    /** @inheritDoc */
+    public function listFiles(string $dir): array
+    {
+        $recs = $this->cmd('/file/print', [], ['name' => '~' . $dir]);
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                'name' => (string) ($r['name'] ?? ''),
+                'type' => (string) ($r['type'] ?? ''),
+                'size' => (int) ($r['size'] ?? 0),
+            ];
+        }
+        return $out;
+    }
 }

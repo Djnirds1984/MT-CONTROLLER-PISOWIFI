@@ -8,6 +8,12 @@
 - [RouterFactory.php](file://includes/RouterOS/RouterFactory.php)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated attribute naming conventions from `uptime-limit` to `limit-uptime` for hotspot user operations
+- Corrected endpoint paths from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for hotspot profile operations
+- Updated examples and API documentation to reflect RouterOS API compatibility fixes
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -52,8 +58,8 @@ RF --> RC
 
 **Section sources**
 - [RouterClientInterface.php:1-128](file://includes/RouterOS/RouterClientInterface.php#L1-L128)
-- [LegacyApiClient.php:1-667](file://includes/RouterOS/LegacyApiClient.php#L1-L667)
-- [RestClient.php:1-459](file://includes/RouterOS/RestClient.php#L1-L459)
+- [LegacyApiClient.php:1-677](file://includes/RouterOS/LegacyApiClient.php#L1-L677)
+- [RestClient.php:1-471](file://includes/RouterOS/RestClient.php#L1-L471)
 - [RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
 ## Core Components
@@ -71,12 +77,12 @@ Key responsibilities:
 
 **Section sources**
 - [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [LegacyApiClient.php:22-667](file://includes/RouterOS/LegacyApiClient.php#L22-L667)
-- [RestClient.php:24-459](file://includes/RouterOS/RestClient.php#L24-L459)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
+- [RestClient.php:24-471](file://includes/RouterOS/RestClient.php#L24-L471)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
 ## Architecture Overview
-The legacy client connects directly to RouterOS via raw TCP or TLS, sending and receiving “sentences” composed of length-prefixed words. The first word is a tag (`!re`, `!done`, `!trap`, `!fatal`), followed by attribute words like `=key=value`. Commands are sent as sentences; replies stream multiple `!re` records before a final `!done`.
+The legacy client connects directly to RouterOS via raw TCP or TLS, sending and receiving "sentences" composed of length-prefixed words. The first word is a tag (`!re`, `!done`, `!trap`, `!fatal`), followed by attribute words like `=key=value`. Commands are sent as sentences; replies stream multiple `!re` records before a final `!done`.
 
 ```mermaid
 sequenceDiagram
@@ -170,7 +176,7 @@ RouterClient <|.. LegacyApiClient
 
 **Diagram sources**
 - [RouterClientInterface.php:31-127](file://includes/RouterOS/RouterClientInterface.php#L31-L127)
-- [LegacyApiClient.php:22-667](file://includes/RouterOS/LegacyApiClient.php#L22-L667)
+- [LegacyApiClient.php:22-677](file://includes/RouterOS/LegacyApiClient.php#L22-L677)
 
 #### Binary Length Encoding and Decoding
 The legacy protocol uses variable-length encodings for word sizes:
@@ -280,7 +286,7 @@ The REST client uses HTTPS JSON endpoints and maps HTTP verbs to RouterOS operat
 It handles JSON decoding, numeric casting, and `.id` handling. While more modern and easier to integrate with web stacks, it may have different performance characteristics compared to the binary protocol.
 
 **Section sources**
-- [RestClient.php:1-459](file://includes/RouterOS/RestClient.php#L1-L459)
+- [RestClient.php:1-471](file://includes/RouterOS/RestClient.php#L1-L471)
 
 ### RouterFactory: Client Selection
 The factory resolves the plaintext password from encrypted storage and chooses the client based on `api_type`:
@@ -388,17 +394,19 @@ The Legacy API client provides a robust, low-level interface to RouterOS using t
 ### RouterOS Operations Using the Legacy Protocol
 Examples of typical operations:
 - List hotspot users: `/ip/hotspot/user/print`
-- Add hotspot user: `/ip/hotspot/user/add` with attributes `name`, `password`, `profile`, optional `comment`, `uptime-limit`
+- Add hotspot user: `/ip/hotspot/user/add` with attributes `name`, `password`, `profile`, optional `comment`, `limit-uptime`
 - Remove hotspot user: `/ip/hotspot/user/remove` with `.id`
-- List hotspot profiles: `/ip/hotspot/profile/print`
-- Add hotspot profile: `/ip/hotspot/profile/add` with `name` and optional attributes
-- Remove hotspot profile: `/ip/hotspot/profile/remove` with `.id`
+- List hotspot profiles: `/ip/hotspot/user/profile/print`
+- Add hotspot profile: `/ip/hotspot/user/profile/add` with `name` and optional attributes
+- Remove hotspot profile: `/ip/hotspot/user/profile/remove` with `.id`
 - List active sessions: `/ip/hotspot/active/print`
 - Kick session: `/ip/hotspot/active/remove` with `.id`
 - List interfaces: `/interface/print`
 - Find active session by MAC: `/ip/hotspot/active/print` with query `mac=<value>`
 
 These operations map to methods like `hotspotUsers()`, `addHotspotUser()`, `deleteHotspotUser()`, `hotspotProfiles()`, `addHotspotProfile()`, `deleteHotspotProfile()`, `activeSessions()`, `kickSession()`, `interfaces()`, and `findActiveByMac()`.
+
+**Updated** The attribute name has been corrected from `uptime-limit` to `limit-uptime` for hotspot user operations, and the endpoint path has been updated from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for hotspot profile operations to maintain RouterOS API compatibility.
 
 **Section sources**
 - [LegacyApiClient.php:466-599](file://includes/RouterOS/LegacyApiClient.php#L466-L599)
@@ -417,3 +425,22 @@ Choose REST when:
 **Section sources**
 - [RestClient.php:1-18](file://includes/RouterOS/RestClient.php#L1-L18)
 - [RouterFactory.php:48-55](file://includes/RouterOS/RouterFactory.php#L48-L55)
+
+### RouterOS API Compatibility Notes
+**Important**: Recent RouterOS API compatibility fixes have been applied to ensure proper operation:
+
+1. **Attribute Name Correction**: The attribute name for hotspot user time limits has been corrected from `uptime-limit` to `limit-uptime` to match RouterOS API specifications.
+
+2. **Endpoint Path Update**: Hotspot profile operations now use the correct endpoint path `/ip/hotspot/user/profile` instead of `/ip/hotspot/profile` to align with RouterOS API structure.
+
+These changes ensure compatibility with various RouterOS versions and prevent API call failures due to incorrect attribute names or endpoint paths.
+
+**Section sources**
+- [LegacyApiClient.php:476](file://includes/RouterOS/LegacyApiClient.php#L476)
+- [LegacyApiClient.php:491](file://includes/RouterOS/LegacyApiClient.php#L491)
+- [LegacyApiClient.php:514](file://includes/RouterOS/LegacyApiClient.php#L514)
+- [LegacyApiClient.php:540](file://includes/RouterOS/LegacyApiClient.php#L540)
+- [RestClient.php:99](file://includes/RouterOS/RestClient.php#L99)
+- [RestClient.php:114](file://includes/RouterOS/RestClient.php#L114)
+- [RestClient.php:137](file://includes/RouterOS/RestClient.php#L137)
+- [RestClient.php:163](file://includes/RouterOS/RestClient.php#L163)

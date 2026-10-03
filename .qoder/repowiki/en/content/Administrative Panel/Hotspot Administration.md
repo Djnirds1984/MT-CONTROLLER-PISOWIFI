@@ -13,7 +13,17 @@
 - [includes/auth.php](file://includes/auth.php)
 - [includes/helpers.php](file://includes/helpers.php)
 - [includes/RouterOS/RouterFactory.php](file://includes/RouterOS/RouterFactory.php)
+- [includes/RouterOS/RouterClientInterface.php](file://includes/RouterOS/RouterClientInterface.php)
+- [includes/RouterOS/LegacyApiClient.php](file://includes/RouterOS/LegacyApiClient.php)
+- [includes/RouterOS/RestClient.php](file://includes/RouterOS/RestClient.php)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Updated Hotspot User Management section to reflect removal of 'login-by' authentication method selection field
+- Enhanced Rate Limit Display section to document improved table view presentation
+- Corrected Uptime Limit Column documentation to show proper 'limit-uptime' attribute usage for per-user session limits
+- Updated Profile Management section to remove deprecated login-by field references
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -77,7 +87,7 @@ G --> H
 **Diagram sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
 - [admin/login.php:1-114](file://admin/login.php#L1-L114)
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
 - [api/session.php:1-107](file://api/session.php#L1-L107)
@@ -89,7 +99,7 @@ G --> H
 
 **Section sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
 - [api/session.php:1-107](file://api/session.php#L1-L107)
@@ -119,7 +129,7 @@ Key responsibilities:
 - [admin/login.php:1-114](file://admin/login.php#L1-L114)
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [api/session.php:1-107](file://api/session.php#L1-L107)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
@@ -243,6 +253,8 @@ Voucher behavior:
 - Per-user uptime-limit can be set; otherwise profile settings apply.
 - Batch results show created codes and any failures.
 
+**Updated** Removed 'login-by' authentication method selection field from user creation forms. Users now inherit authentication methods from their assigned profiles.
+
 ```mermaid
 flowchart TD
 Start(["Hotspot Users Tab"]) --> Form{"Add single user or Generate vouchers?"}
@@ -264,7 +276,7 @@ AuditBulk --> End
 - [admin/hotspot.php:364-493](file://admin/hotspot.php#L364-L493)
 
 **Section sources**
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 
 ### Active Session Monitoring and Termination
 - Active sessions tab lists connected users with MAC, IP, uptime, and bytes in/out.
@@ -306,20 +318,21 @@ Hotspot-->>Admin : redirect back to sessions tab
 - [admin/hotspot.php:546-589](file://admin/hotspot.php#L546-L589)
 
 ### Hotspot Profiles and Bandwidth Management
-- Profiles define authentication method, session timeout, uptime limit, rate limit, shared users, and idle timeout.
+- Profiles define session timeout, uptime limit, rate limit, shared users, and idle timeout.
 - Rate limit uses MikroTik format rx/tx (e.g., symmetric 5 Mbps).
 - Shared users controls how many devices can share one voucher simultaneously.
 
 Promotional configurations:
-- Create dedicated profiles for promotions (e.g., “promo-1h”, “guest-24h”).
+- Create dedicated profiles for promotions (e.g., "promo-1h", "guest-24h").
 - Use short session timeouts and low rate limits for trial users.
 - Keep shared users at 1 for single-device vouchers.
+
+**Updated** Removed 'login-by' authentication method field from profile creation forms. Authentication methods are now managed exclusively through profile assignments.
 
 ```mermaid
 classDiagram
 class Profile {
 +string name
-+string login_by
 +string session_timeout
 +string uptime_limit
 +string rate_limit
@@ -329,7 +342,7 @@ class Profile {
 class HotspotUser {
 +string name
 +string profile
-+string uptime_limit
++string limit_uptime
 +string comment
 +bool disabled
 }
@@ -345,6 +358,36 @@ Profile <|-- HotspotUser : "assigned via profile"
 - [admin/hotspot.php:222-251](file://admin/hotspot.php#L222-L251)
 - [admin/hotspot.php:591-666](file://admin/hotspot.php#L591-L666)
 - [admin/hotspot.php:669-711](file://admin/hotspot.php#L669-L711)
+
+### Enhanced Rate Limit Display and Uptime Limit Columns
+The hotspot administration interface provides enhanced visibility into rate limiting and uptime configurations:
+
+**Rate Limit Display:**
+- Profiles table shows rate-limit values in a dedicated column with proper formatting
+- Rate limits are displayed in MikroTik format (rx/tx) for easy identification
+- Empty rate limits are handled gracefully with blank cells
+
+**Uptime Limit Columns:**
+- Hotspot users table displays `limit-uptime` attribute for per-user session limits
+- Profiles table displays `uptime-limit` attribute for profile-level session limits
+- Clear distinction between per-user overrides and profile defaults
+
+**Updated** Enhanced table views now properly distinguish between per-user `limit-uptime` and profile-level `uptime-limit` attributes, providing clearer visibility into session duration controls.
+
+```mermaid
+flowchart TD
+UsersTable["Hotspot Users Table"] --> LimitUptime["Display limit-uptime<br/>(per-user override)"]
+ProfilesTable["Profiles Table"] --> UptimeLimit["Display uptime-limit<br/>(profile default)"]
+RateLimit["Rate Limit Column"] --> Format["Show rx/tx format<br/>(e.g., 5M/5M)"]
+```
+
+**Diagram sources**
+- [admin/hotspot.php:507-514](file://admin/hotspot.php#L507-L514)
+- [admin/hotspot.php:666-674](file://admin/hotspot.php#L666-L674)
+
+**Section sources**
+- [admin/hotspot.php:507-514](file://admin/hotspot.php#L507-L514)
+- [admin/hotspot.php:666-674](file://admin/hotspot.php#L666-L674)
 
 ### Interface-Level Traffic Monitoring and Bandwidth Visibility
 - Dashboard cards display per-interface traffic rates computed from counter diffs stored in `monitor_samples`.
@@ -435,7 +478,7 @@ Helpers --> Session
 
 **Diagram sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
 - [api/session.php:1-107](file://api/session.php#L1-L107)
@@ -447,7 +490,7 @@ Helpers --> Session
 
 **Section sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-718](file://admin/hotspot.php#L1-L718)
+- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
 - [api/session.php:1-107](file://api/session.php#L1-L107)
@@ -478,6 +521,7 @@ Operational tips:
 - Use audit logs to trace who created/deleted users or kicked sessions.
 - Keep profiles minimal and well-named; reuse them across users and vouchers.
 - When troubleshooting bandwidth, compare interface rates with active session counts.
+- Verify that per-user `limit-uptime` values are correctly applied and not conflicting with profile `uptime-limit` settings.
 
 **Section sources**
 - [admin/routers.php:116-141](file://admin/routers.php#L116-L141)
@@ -486,7 +530,7 @@ Operational tips:
 - [api/session.php:58-83](file://api/session.php#L58-L83)
 
 ## Conclusion
-The hotspot administration interface provides a comprehensive toolkit for managing MikroTik hotspot deployments. Operators can securely authenticate, configure routers, create and manage hotspot users and vouchers, monitor active sessions, and analyze interface-level traffic. Profiles enable fine-grained control over authentication, session duration, and bandwidth. Following the recommended workflows and best practices ensures reliable daily operations and scalable hotspot management.
+The hotspot administration interface provides a comprehensive toolkit for managing MikroTik hotspot deployments. Operators can securely authenticate, configure routers, create and manage hotspot users and vouchers, monitor active sessions, and analyze interface-level traffic. Profiles enable fine-grained control over session duration and bandwidth. Following the recommended workflows and best practices ensures reliable daily operations and scalable hotspot management.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -512,5 +556,7 @@ The hotspot administration interface provides a comprehensive toolkit for managi
 - Keep shared users at 1 for single-device vouchers to prevent sharing.
 - Use descriptive comments for voucher batches and users for auditability.
 - Regularly review audit logs for anomalies.
+- Configure appropriate rate limits and session timeouts through profiles.
+- Monitor the distinction between per-user `limit-uptime` and profile `uptime-limit` settings.
 
 [No sources needed since this section provides general guidance]
