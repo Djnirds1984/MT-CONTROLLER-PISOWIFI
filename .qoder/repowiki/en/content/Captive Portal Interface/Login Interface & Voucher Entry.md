@@ -3,8 +3,6 @@
 <cite>
 **Referenced Files in This Document**
 - [login.html](file://hotspot/login.html)
-- [alogin.html](file://hotspot/alogin.html)
-- [rlogin.html](file://hotspot/rlogin.html)
 - [core.js](file://hotspot/assets/js/core.js)
 - [config.js](file://hotspot/assets/js/config.js)
 - [varbridge.js](file://hotspot/js/varbridge.js)
@@ -16,6 +14,7 @@
 
 ## Update Summary
 **Changes Made**
+- Streamlined authentication flow unifying voucher and member login using CHAP challenge-response pattern
 - Enhanced external mode login functionality with dynamic form creation fallback
 - Added robust validation checks for voucher-based authentication reliability
 - Improved SBC lighttpd deployment compatibility through improved form construction
@@ -34,8 +33,9 @@
 
 ## Introduction
 This document explains the login interface and voucher entry system for the captive portal. It covers:
+- The unified CHAP challenge-response authentication flow for both voucher and member login
 - The voucher input form and member login modal
-- Dual authentication flows: router-native CHAP challenge-response and external HTTP-PAP
+- Dual authentication modes: router-native CHAP challenge-response and external HTTP-PAP
 - MD5 hashing used for CHAP password computation
 - Automatic MAC-address-as-voucher generation
 - Form validation, error handling, and integration with the underlying MikroTik hotspot and vendor systems
@@ -62,7 +62,7 @@ MT --> Vendor["Vendo / Top-up Service"]
 - [varbridge.js:41-103](file://hotspot/js/varbridge.js#L41-L103)
 
 **Section sources**
-- [login.html:1-790](file://hotspot/login.html#L1-L790)
+- [login.html:1-763](file://hotspot/login.html#L1-L763)
 - [core.js:1-959](file://hotspot/assets/js/core.js#L1-L959)
 - [config.js:1-63](file://hotspot/assets/js/config.js#L1-L63)
 - [varbridge.js:1-239](file://hotspot/js/varbridge.js#L1-L239)
@@ -72,21 +72,21 @@ MT --> Vendor["Vendo / Top-up Service"]
 - [hotspot-external-portal.rsc:1-235](file://deploy/mikrotik/hotspot-external-portal.rsc#L1-L235)
 
 ## Core Components
+- Unified CHAP authentication: Both voucher and member login now use the same CHAP challenge-response pattern
 - Voucher input form: single-line input plus submit button that triggers doLogin()
 - Member login modal: username/password form that computes CHAP response via hexMD5()
 - Dual-mode bridge: varbridge.js detects external mode and patches $(...) tokens
 - Configuration: config.js toggles features like MAC-as-voucher, member login visibility, and multi-vendor behavior
 - MD5 helper: md5.js provides hexMD5() for CHAP password computation
-- Router stubs: rlogin.html and alogin.html redirect or refresh after PAP login
 - Admin auth utilities: auth.php and crypto.php secure admin sessions and router credentials
 
 Key responsibilities:
-- login.html orchestrates CHAP/PAP submission and stores temporary validity data
+- login.html orchestrates unified CHAP/PAP submission and stores temporary validity data
 - core.js manages vendor interactions, coin slot flow, QR purchase, and auto-login triggers
 - varbridge.js enables the same HTML to run on both router and SBC
 - hotspot-external-portal.rsc documents the external PAP flow and router configuration
 
-**Updated** Enhanced external mode support with dynamic form creation fallback when sendin form element is missing from DOM
+**Updated** Streamlined authentication flow unifies voucher and member login using CHAP challenge-response pattern for improved consistency
 
 **Section sources**
 - [login.html:349-428](file://hotspot/login.html#L349-L428)
@@ -96,17 +96,16 @@ Key responsibilities:
 - [config.js:37-63](file://hotspot/assets/js/config.js#L37-L63)
 - [varbridge.js:1-239](file://hotspot/js/varbridge.js#L1-L239)
 - [md5.js:209-218](file://hotspot/md5.js#L209-L218)
-- [rlogin.html:1-13](file://hotspot/rlogin.html#L1-L13)
-- [alogin.html:1-45](file://hotspot/alogin.html#L1-L45)
 - [auth.php:18-57](file://includes/auth.php#L18-L57)
 - [crypto.php:17-48](file://includes/crypto.php#L17-L48)
 
 ## Architecture Overview
-The portal supports two authentication paths:
+The portal supports two authentication paths with a unified CHAP approach:
 
 - Router-native mode (CHAP):
-  - The browser submits a hidden form to the router's login endpoint
+  - Both voucher and member login use the same CHAP challenge-response pattern
   - Password is computed as MD5(chap-id + "" + chap-challenge) or MD5(chap-id + voucher + chap-challenge) depending on loginOption
+  - Voucher code serves as both username and password in the unified flow
 - External mode (HTTP-PAP):
   - The SBC serves the portal; the login form posts plaintext voucher to the router's login URL
   - Router responds with redirect to the SBC status page
@@ -117,8 +116,8 @@ participant B as "Browser"
 participant L as "Portal (login.html)"
 participant R as "MikroTik Hotspot"
 participant S as "SBC Status Page"
-Note over B,R : Router-native (CHAP)
-B->>L : Click SUBMIT
+Note over B,R : Router-native (Unified CHAP)
+B->>L : Click SUBMIT (voucher or member)
 L->>L : Compute CHAP password via hexMD5()
 L->>R : POST username/password (CHAP)
 R-->>B : Redirect to status or error
@@ -145,15 +144,40 @@ S-->>B : Show session status
 
 ## Detailed Component Analysis
 
+### Unified CHAP Authentication Flow
+The authentication flow has been streamlined to use a single CHAP challenge-response pattern for both voucher and member login:
+
+- **Voucher Login**: The voucher code serves as both username and password
+- **Member Login**: Uses traditional username/password with CHAP response computation
+- **Common Pattern**: Both flows compute CHAP password using `hexMD5('$(chap-id)' + credential + '$(chap-challenge)')`
+
+```mermaid
+flowchart TD
+Start(["User submits login"]) --> Type{"Login type?"}
+Type --> |Voucher| VoucherFlow["Set username=voucher<br/>Compute CHAP: MD5(chap-id + '' + chap-challenge)<br/>or MD5(chap-id + voucher + chap-challenge)"]
+Type --> |Member| MemberFlow["Set username=member_username<br/>Compute CHAP: MD5(chap-id + password + chap-challenge)"]
+VoucherFlow --> Submit["Submit hidden form"]
+MemberFlow --> Submit
+Submit --> End(["Router authenticates"])
+```
+
+**Diagram sources**
+- [login.html:365-415](file://hotspot/login.html#L365-L415)
+- [login.html:409-415](file://hotspot/login.html#L409-L415)
+
+**Section sources**
+- [login.html:365-415](file://hotspot/login.html#L365-L415)
+- [login.html:409-415](file://hotspot/login.html#L409-L415)
+
 ### Voucher Input Form and Submission Flow
 - The voucher input field and submit button are defined in the main content area
-- On submit, doLogin() runs:
-  - In external mode, it sets username/password to the voucher and navigates to the router login URL
-  - **Enhanced**: Dynamic form creation fallback when sendin form element is missing from DOM
-  - In router-native mode, it computes CHAP password using hexMD5() and submits the hidden form
+- On submit, doLogin() runs with unified CHAP authentication:
+  - Sets voucher as both username and password
+  - Computes CHAP password based on loginOption (username-only vs username+password)
+  - Submits the hidden form to the router
 - Temporary validity is stored locally and merged with persisted validity when available
 
-**Updated** Added robust fallback mechanism for external mode form creation
+**Updated** Streamlined to use unified CHAP flow for voucher authentication
 
 ```mermaid
 flowchart TD
@@ -177,7 +201,7 @@ Store --> End
 - [login.html:483-494](file://hotspot/login.html#L483-L494)
 
 ### Enhanced External Mode Form Creation
-When operating in external mode (SBC lighttpd deployment), the system now includes enhanced form creation logic:
+When operating in external mode (SBC lighttpd deployment), the system includes enhanced form creation logic:
 
 - **Dynamic Form Detection**: Checks if the sendin form exists in the DOM before attempting to use it
 - **Fallback Form Construction**: If the form is missing (due to varbridge stripping conditional elements), creates a new form element programmatically
@@ -221,7 +245,8 @@ R-->>B : Redirect to status or error
 ### Member Login Modal and CHAP Response
 - The member login modal contains username and password fields
 - On submit, doLoginMember() computes CHAP password as hexMD5(chap-id + password + chap-challenge) and submits the hidden form
-- This path is only present when the router supplies CHAP variables
+- This path uses the same CHAP pattern as voucher login for consistency
+- The form is only present when the router supplies CHAP variables
 
 ```mermaid
 sequenceDiagram
@@ -236,17 +261,18 @@ R-->>B : Redirect to status or error
 ```
 
 **Diagram sources**
-- [login.html:418-428](file://hotspot/login.html#L418-L428)
-- [login.html:718-726](file://hotspot/login.html#L718-L726)
+- [login.html:409-415](file://hotspot/login.html#L409-L415)
+- [login.html:704-738](file://hotspot/login.html#L704-L738)
 
 **Section sources**
-- [login.html:418-428](file://hotspot/login.html#L418-L428)
+- [login.html:409-415](file://hotspot/login.html#L409-L415)
 - [login.html:704-738](file://hotspot/login.html#L704-L738)
 
 ### Dual Authentication Flows: CHAP vs HTTP-PAP
-- Router-native mode uses CHAP:
-  - Password = MD5(chap-id + "" + chap-challenge) when loginOption == 0
-  - Password = MD5(chap-id + voucher + chap-challenge) when loginOption == 1
+- Router-native mode uses unified CHAP:
+  - Voucher login: Password = MD5(chap-id + "" + chap-challenge) when loginOption == 0
+  - Voucher login: Password = MD5(chap-id + voucher + chap-challenge) when loginOption == 1
+  - Member login: Password = MD5(chap-id + password + chap-challenge)
 - External mode uses HTTP-PAP:
   - The SBC portal posts the voucher as plaintext to the router's login URL
   - Router redirects to the SBC status page upon success
@@ -254,7 +280,7 @@ R-->>B : Redirect to status or error
 ```mermaid
 flowchart TD
 A["Portal receives request"] --> B{"Router serves or SBC serves?"}
-B --> |Router| C["CHAP: compute MD5(chap-id + '' + chap-challenge)<br/>or MD5(chap-id + voucher + chap-challenge)"]
+B --> |Router| C["Unified CHAP: compute MD5(chap-id + '' + chap-challenge)<br/>or MD5(chap-id + voucher + chap-challenge)<br/>for voucher login<br/>or MD5(chap-id + password + chap-challenge)<br/>for member login"]
 B --> |SBC| D["HTTP-PAP: POST voucher as username/password<br/>with dynamic form fallback"]
 C --> E["Router authenticates and redirects"]
 D --> F["Router authenticates and redirects to SBC status"]
@@ -272,6 +298,7 @@ D --> F["Router authenticates and redirects to SBC status"]
 - The hidden form sendin carries username and password
 - doLogin() populates these fields based on the current mode and loginOption
 - hexMD5() from md5.js performs the MD5 digest required by CHAP
+- **Streamlined**: Both voucher and member login now use the same CHAP computation pattern
 
 ```mermaid
 sequenceDiagram
@@ -279,7 +306,7 @@ participant U as "User"
 participant P as "Portal Script"
 participant F as "sendin form"
 participant R as "Router"
-U->>P : Submit voucher
+U->>P : Submit voucher or member credentials
 P->>P : Build CHAP string using chap-id/chap-challenge
 P->>F : Set username/password
 F->>R : POST to router login
@@ -359,12 +386,12 @@ Skip --> End
 ```
 
 **Diagram sources**
-- [login.html:380-385](file://hotspot/login.html#L380-L385)
+- [login.html:370-373](file://hotspot/login.html#L370-L373)
 - [core.js:139-143](file://hotspot/assets/js/core.js#L139-L143)
 - [config.js:60-61](file://hotspot/assets/js/config.js#L60-L61)
 
 **Section sources**
-- [login.html:380-385](file://hotspot/login.html#L380-L385)
+- [login.html:370-373](file://hotspot/login.html#L370-L373)
 - [core.js:139-143](file://hotspot/assets/js/core.js#L139-L143)
 - [config.js:60-61](file://hotspot/assets/js/config.js#L60-L61)
 
@@ -414,7 +441,7 @@ I --> |Yes| J["Proceed to next step (auto-login, show rates, etc.)"]
 
 ### Integration with Underlying Systems
 - Router integration:
-  - Router-native CHAP via hidden form submission
+  - Router-native CHAP via hidden form submission with unified authentication
   - External PAP via direct navigation to router login URL with enhanced form fallback
 - Vendor/top-up integration:
   - AJAX calls to vendor endpoints for top-up, coin check, and voucher conversion
@@ -498,12 +525,13 @@ Common issues and resolutions:
 - CHAP failures:
   - Verify chap-id and chap-challenge are present in router-native mode
   - Confirm hexMD5() is loaded and functioning
+  - **Updated**: Ensure both voucher and member login use the same CHAP pattern
 - **Enhanced**: External mode form issues:
   - The system now automatically creates a fallback form if the sendin form is missing
   - Check that PORTAL.external is properly detected by varbridge.js
   - Verify that PORTAL.params.login contains the correct router login URL
 
-**Updated** Added troubleshooting guidance for enhanced external mode form creation
+**Updated** Added troubleshooting guidance for streamlined CHAP authentication flow and enhanced external mode form creation
 
 **Section sources**
 - [core.js:1-14](file://hotspot/assets/js/core.js#L1-L14)
@@ -513,8 +541,8 @@ Common issues and resolutions:
 - [login.html:365-394](file://hotspot/login.html#L365-L394)
 
 ## Conclusion
-The portal provides a flexible login interface supporting both voucher-based and member-based authentication. It seamlessly operates in router-native CHAP mode and external HTTP-PAP mode, with robust client-side handling for voucher entry, automatic MAC-as-voucher generation, and vendor integrations. 
+The portal provides a flexible login interface supporting both voucher-based and member-based authentication through a streamlined CHAP challenge-response pattern. Both authentication methods now use the same CHAP flow for improved consistency and maintainability. The system seamlessly operates in router-native CHAP mode and external HTTP-PAP mode, with robust client-side handling for voucher entry, automatic MAC-as-voucher generation, and vendor integrations. 
 
-**Enhanced** The latest improvements include dynamic form creation fallback for external mode operation, ensuring reliable authentication even when the sendin form element is missing from the DOM due to varbridge processing. Security is reinforced through modern password hashing for admin accounts and encrypted storage for router credentials. Proper configuration of the router and SBC ensures reliable operation across both deployment modes.
+**Enhanced** The latest improvements include streamlined authentication flow unifying voucher and member login using CHAP challenge-response pattern, ensuring consistent security across both authentication methods. Additional enhancements include dynamic form creation fallback for external mode operation, ensuring reliable authentication even when the sendin form element is missing from the DOM due to varbridge processing. Security is reinforced through modern password hashing for admin accounts and encrypted storage for router credentials. Proper configuration of the router and SBC ensures reliable operation across both deployment modes.
 
 [No sources needed since this section summarizes without analyzing specific files]

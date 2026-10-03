@@ -3,7 +3,7 @@ schema_version: 1
 locale: en-US
 branch: main
 nodes_managed: true
-exported_at: "2026-10-03T08:14:02Z"
+exported_at: "2026-10-03T09:15:52Z"
 modules:
     "":
         dir_name: AIRCOINS NETFI MikroTik Hotspot Controller
@@ -64,8 +64,8 @@ modules:
             - path: deployment
             - path: hotspot_portal
     shared_includes:
-        dir_name: AIRCOINS Shared Runtime & RouterOS Client Abstraction
-        title: AIRCOINS Shared Runtime & RouterOS Client Abstraction
+        dir_name: Shared Runtime & RouterOS Abstraction
+        title: Shared Runtime & RouterOS Abstraction
         scope:
             - includes/
         source_files: []

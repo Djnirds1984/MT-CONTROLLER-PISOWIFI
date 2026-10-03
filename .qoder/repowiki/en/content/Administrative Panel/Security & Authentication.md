@@ -5,6 +5,8 @@
 - [admin/login.php](file://admin/login.php)
 - [admin/logout.php](file://admin/logout.php)
 - [admin/index.php](file://admin/index.php)
+- [admin/devices.php](file://admin/devices.php)
+- [admin/routers.php](file://admin/routers.php)
 - [includes/auth.php](file://includes/auth.php)
 - [includes/csrf.php](file://includes/csrf.php)
 - [includes/crypto.php](file://includes/crypto.php)
@@ -14,24 +16,35 @@
 - [api/session.php](file://api/session.php)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Enhanced CSRF protection implementation across all administrative endpoints
+- Comprehensive input validation for device management operations
+- Detailed audit logging for all device CRUD operations (add, edit, delete, kick)
+- Router management security enhancements with encrypted credentials
+- Improved session handling and authentication flow
+- Added device management security controls and monitoring capabilities
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
+6. [Device Management Security](#device-management-security)
+7. [Router Management Security](#router-management-security)
+8. [Dependency Analysis](#dependency-analysis)
+9. [Performance Considerations](#performance-considerations)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the administrative panel security and authentication system for the project. It covers secure HTTPS-only session handling, CSRF protection, rate limiting, brute-force prevention, audit logging, password hashing with Argon2id (with bcrypt fallback), logout procedures, and operational guidance to keep the admin interface secure. It also provides troubleshooting steps for common authentication and security issues.
+This document explains the administrative panel security and authentication system for the project. It covers secure HTTPS-only session handling, comprehensive CSRF protection, input validation, rate limiting, brute-force prevention, detailed audit logging, password hashing with Argon2id (with bcrypt fallback), logout procedures, and operational guidance to keep the admin interface secure. The system now includes enhanced security for device and router management operations with complete audit trails.
 
 ## Project Structure
 The security-relevant parts are concentrated under `admin/` for user-facing endpoints and `includes/` for shared security logic:
 
-- Admin entry points: login, logout, dashboard.
+- Admin entry points: login, logout, dashboard, device management, router management.
 - Shared security modules: authentication, CSRF, configuration, database schema, helpers, and encryption utilities.
 - A portal-facing API endpoint that is intentionally unauthenticated but read-only and input-validated.
 
@@ -41,6 +54,8 @@ subgraph "Admin Panel"
 Login["admin/login.php"]
 Logout["admin/logout.php"]
 Dashboard["admin/index.php"]
+Devices["admin/devices.php"]
+Routers["admin/routers.php"]
 end
 subgraph "Shared Security Modules"
 Auth["includes/auth.php"]
@@ -58,6 +73,10 @@ Login --> Csrf
 Logout --> Auth
 Logout --> Csrf
 Dashboard --> Auth
+Devices --> Auth
+Devices --> Csrf
+Routers --> Auth
+Routers --> Csrf
 SessionApi --> Db
 SessionApi --> Helpers
 Auth --> Config
@@ -71,6 +90,8 @@ Crypto --> Config
 - [admin/login.php:14-18](file://admin/login.php#L14-L18)
 - [admin/logout.php:15-19](file://admin/logout.php#L15-L19)
 - [admin/index.php:14-17](file://admin/index.php#L14-L17)
+- [admin/devices.php:11-15](file://admin/devices.php#L11-L15)
+- [admin/routers.php:17-21](file://admin/routers.php#L17-L21)
 - [includes/auth.php:14-15](file://includes/auth.php#L14-L15)
 - [includes/csrf.php:12-14](file://includes/csrf.php#L12-L14)
 - [includes/config.php:15-43](file://includes/config.php#L15-L43)
@@ -83,13 +104,15 @@ Crypto --> Config
 - [admin/login.php:1-114](file://admin/login.php#L1-L114)
 - [admin/logout.php:1-43](file://admin/logout.php#L1-L43)
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
+- [admin/devices.php:1-537](file://admin/devices.php#L1-L537)
+- [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/csrf.php:1-68](file://includes/csrf.php#L1-L68)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/crypto.php:1-138](file://includes/crypto.php#L1-L138)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 
 ## Core Components
 - Authentication and session hardening: centralized in `includes/auth.php`.
@@ -98,16 +121,17 @@ Crypto --> Config
 - Database schema and persistence: SQLite connection and tables in `includes/db.php`.
 - Output escaping and JSON helpers: XSS-safe output and JSON responses in `includes/helpers.php`.
 - Encryption for router credentials at rest: libsodium secretbox in `includes/crypto.php`.
-- Admin UI endpoints: login, logout, and dashboard in `admin/`.
+- Admin UI endpoints: login, logout, dashboard, device management, and router management in `admin/`.
 - Portal session lookup API: unauthenticated, read-only MAC-based status in `api/session.php`.
 
 Key responsibilities:
 - Enforce HTTPS-only cookies and strict SameSite policy.
-- Protect state-changing requests with CSRF tokens.
+- Protect state-changing requests with CSRF tokens across all administrative operations.
 - Rate-limit failed logins per client IP and clear counters on success.
 - Hash passwords with Argon2id when available; fall back to bcrypt.
-- Audit privileged actions and login attempts.
+- Audit privileged actions including device and router management operations.
 - Destroy sessions securely on logout.
+- Validate and sanitize all user inputs for device and router management.
 
 **Section sources**
 - [includes/auth.php:17-57](file://includes/auth.php#L17-L57)
@@ -118,7 +142,7 @@ Key responsibilities:
 - [includes/auth.php:269-281](file://includes/auth.php#L269-L281)
 - [includes/csrf.php:21-67](file://includes/csrf.php#L21-L67)
 - [includes/config.php:25-43](file://includes/config.php#L25-L43)
-- [includes/db.php:56-116](file://includes/db.php#L56-L116)
+- [includes/db.php:56-150](file://includes/db.php#L56-L150)
 - [includes/helpers.php:17-38](file://includes/helpers.php#L17-L38)
 - [includes/crypto.php:25-47](file://includes/crypto.php#L25-L47)
 
@@ -126,11 +150,11 @@ Key responsibilities:
 The admin panel enforces a layered security model:
 
 - HTTP layer: TLS termination ensures HTTPS-only access; cookies are marked Secure only over HTTPS.
-- Request validation: CSRF tokens protect POST endpoints.
+- Request validation: CSRF tokens protect all POST endpoints including device and router management.
 - Authentication: Session-based admin login with idle timeout enforcement.
 - Authorization: Protected pages call into an auth guard before rendering.
 - Brute-force mitigation: Per-IP rate limiting using a dedicated table.
-- Auditing: All login/logout and privileged actions are recorded.
+- Auditing: All login/logout and privileged actions including device/router management are recorded.
 - Data protection: Passwords hashed with Argon2id; router credentials encrypted at rest.
 
 ```mermaid
@@ -161,7 +185,7 @@ Admin-->>Client : 302 redirect to dashboard
 - [admin/login.php:37-61](file://admin/login.php#L37-L61)
 - [includes/csrf.php:48-67](file://includes/csrf.php#L48-L67)
 - [includes/auth.php:151-190](file://includes/auth.php#L151-L190)
-- [includes/db.php:56-116](file://includes/db.php#L56-L116)
+- [includes/db.php:56-150](file://includes/db.php#L56-L150)
 
 ## Detailed Component Analysis
 
@@ -199,6 +223,7 @@ CheckIdle --> |Yes| Proceed["Render protected page"]
 - Forms include a hidden field containing the token.
 - State-changing POST endpoints verify the token using a timing-safe comparison.
 - Non-POST requests bypass verification, allowing safe inclusion of CSRF checks at the top of endpoints.
+- All administrative operations including device and router management are protected.
 
 ```mermaid
 sequenceDiagram
@@ -222,6 +247,8 @@ Csrf-->>Endpoint : OK or 403
 - [includes/csrf.php:1-68](file://includes/csrf.php#L1-L68)
 - [admin/login.php:37-39](file://admin/login.php#L37-L39)
 - [admin/logout.php:21-27](file://admin/logout.php#L21-L27)
+- [admin/devices.php:34-35](file://admin/devices.php#L34-L35)
+- [admin/routers.php:47-48](file://admin/routers.php#L47-L48)
 
 ### Rate Limiting and Brute Force Prevention
 - Failed login attempts are tracked per client IP in a dedicated table.
@@ -251,7 +278,9 @@ Success["Successful login"] --> Clear["Clear failed attempts for IP"]
 
 ### Audit Logging System
 - Every login and logout action is audited with the acting admin ID, action type, optional detail, client IP, and timestamp.
-- Audit entries are written to a dedicated table.
+- Device management operations (sync, add, edit, delete, kick) are comprehensively logged.
+- Router management operations (add, edit, delete, test) are fully audited.
+- Audit entries are written to a dedicated table with detailed context information.
 - Logout auditing is best-effort; failures do not block sign-out.
 
 ```mermaid
@@ -263,17 +292,25 @@ AdminUI->>Auth : aircoins_audit(admin_id, 'login', 'admin login')
 Auth->>DB : INSERT INTO audit_log
 AdminUI->>Auth : aircoins_audit(admin_id, 'logout', 'admin logout')
 Auth->>DB : INSERT INTO audit_log
+AdminUI->>Auth : aircoins_audit(admin_id, 'device_add', 'mac=AA : BB : CC')
+Auth->>DB : INSERT INTO audit_log
+AdminUI->>Auth : aircoins_audit(admin_id, 'router_edit', 'edited router #5')
+Auth->>DB : INSERT INTO audit_log
 ```
 
 **Diagram sources**
 - [includes/auth.php:269-281](file://includes/auth.php#L269-L281)
 - [admin/login.php:46-50](file://admin/login.php#L46-L50)
 - [admin/logout.php:29-37](file://admin/logout.php#L29-L37)
+- [admin/devices.php:118-201](file://admin/devices.php#L118-L201)
+- [admin/routers.php:107-211](file://admin/routers.php#L107-L211)
 
 **Section sources**
 - [includes/auth.php:269-281](file://includes/auth.php#L269-L281)
 - [admin/login.php:46-50](file://admin/login.php#L46-L50)
 - [admin/logout.php:29-37](file://admin/logout.php#L29-L37)
+- [admin/devices.php:118-201](file://admin/devices.php#L118-L201)
+- [admin/routers.php:107-211](file://admin/routers.php#L107-L211)
 
 ### Password Hashing with Argon2id and Secure Verification
 - Password hashing prefers Argon2id when available and falls back to bcrypt otherwise.
@@ -355,7 +392,7 @@ Valid --> |Yes| Render["Render page"]
 - [admin/index.php:17-17](file://admin/index.php#L17-L17)
 
 ### Encryption for Router Credentials
-- Router passwords are stored encrypted at rest using libsodium’s XSalsa20-Poly1305 secret box.
+- Router passwords are stored encrypted at rest using libsodium's XSalsa20-Poly1305 secret box.
 - The 32-byte key is loaded from a file outside the web root and cached during the request.
 - Plaintext values are never persisted; decryption occurs only in memory for the duration of a request.
 
@@ -402,10 +439,106 @@ Api-->>Portal : JSON {connected,user,uptime,bytes_in,bytes_out,time_left}
 
 **Diagram sources**
 - [api/session.php:50-106](file://api/session.php#L50-L106)
-- [includes/db.php:56-116](file://includes/db.php#L56-L116)
+- [includes/db.php:56-150](file://includes/db.php#L56-L150)
 
 **Section sources**
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
+
+## Device Management Security
+
+### Comprehensive Input Validation
+- All device management operations implement strict input validation and sanitization.
+- MAC addresses are validated and normalized to uppercase format.
+- Status values are restricted to predefined enums ('active', 'expired', 'blocked').
+- Numeric IDs are validated to prevent injection attacks.
+- Hostnames and IP addresses are trimmed and sanitized.
+
+### CSRF Protection for Device Operations
+- All device management forms include CSRF tokens.
+- POST operations (sync, add, edit, delete, kick) require valid CSRF tokens.
+- CSRF verification prevents unauthorized device modifications.
+
+### Detailed Audit Logging
+- Device synchronization operations are logged with router ID and count of synced devices.
+- Manual device additions are logged with MAC address details.
+- Device edits are logged with device ID and modification details.
+- Device deletions are logged with device ID and MAC address.
+- Session kick operations are logged with router ID, session ID, and MAC address.
+
+```mermaid
+sequenceDiagram
+participant Admin as "Admin User"
+participant Devices as "devices.php"
+participant Auth as "auth.php"
+participant DB as "db.php"
+Admin->>Devices : POST sync/add/edit/delete/kick
+Devices->>Devices : csrf_verify() + input validation
+alt Sync Operation
+Devices->>Devices : Sync from MikroTik sessions
+Devices->>Auth : aircoins_audit('devices_sync', ...)
+else Add Device
+Devices->>DB : INSERT device record
+Devices->>Auth : aircoins_audit('device_add', ...)
+else Edit Device
+Devices->>DB : UPDATE device record
+Devices->>Auth : aircoins_audit('device_edit', ...)
+else Delete Device
+Devices->>DB : DELETE device record
+Devices->>Auth : aircoins_audit('device_delete', ...)
+else Kick Session
+Devices->>Devices : Kick session from router
+Devices->>Auth : aircoins_audit('device_kick', ...)
+end
+```
+
+**Diagram sources**
+- [admin/devices.php:34-236](file://admin/devices.php#L34-L236)
+- [admin/devices.php:118-201](file://admin/devices.php#L118-L201)
+
+**Section sources**
+- [admin/devices.php:1-537](file://admin/devices.php#L1-L537)
+
+## Router Management Security
+
+### Encrypted Credential Storage
+- Router passwords are encrypted using libsodium before storage.
+- Decryption occurs only in memory during API operations.
+- Password fields are never rendered back in forms during edit operations.
+- Blank password fields during edit preserve existing encrypted credentials.
+
+### Input Validation and Sanitization
+- Router names, hosts, and usernames are trimmed and validated.
+- API ports are validated to be within acceptable ranges (1-65535).
+- API types are restricted to 'rest' or 'legacy'.
+- TLS verification flags are properly handled.
+
+### Comprehensive Audit Trail
+- Router additions are logged with router ID, name, and API type.
+- Router edits are logged with router ID and modification details.
+- Router deletions are logged with router ID and name.
+- Connection tests are logged with success/failure status and error details.
+
+```mermaid
+flowchart TD
+AddEdit["Add/Edit Router"] --> Validate["Validate inputs"]
+Validate --> Encrypt["Encrypt password if provided"]
+Encrypt --> Save["Save to database"]
+Save --> Audit["Audit operation"]
+Audit --> Flash["Flash success message"]
+Test["Test Connection"] --> Connect["Connect to router"]
+Connect --> Result{"Connection successful?"}
+Result --> |Yes| Success["Log success + status"]
+Result --> |No| Failure["Log failure + error"]
+Delete["Delete Router"] --> Remove["Remove from database"]
+Remove --> AuditDel["Audit deletion"]
+```
+
+**Diagram sources**
+- [admin/routers.php:143-223](file://admin/routers.php#L143-L223)
+- [admin/routers.php:107-211](file://admin/routers.php#L107-L211)
+
+**Section sources**
+- [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 
 ## Dependency Analysis
 The security subsystem exhibits clear separation of concerns:
@@ -413,6 +546,8 @@ The security subsystem exhibits clear separation of concerns:
 - `admin/login.php` depends on helpers, auth, and csrf modules.
 - `admin/logout.php` depends on helpers, auth, and csrf modules.
 - `admin/index.php` depends on db and layout modules and enforces authentication via auth.
+- `admin/devices.php` depends on db, crypto, csrf, layout, and router factory modules.
+- `admin/routers.php` depends on db, crypto, csrf, layout, and router factory modules.
 - `includes/auth.php` depends on config and db modules.
 - `includes/csrf.php` depends on config, helpers, and auth modules.
 - `includes/crypto.php` depends on config module.
@@ -425,11 +560,17 @@ Login --> Csrf["includes/csrf.php"]
 Logout["admin/logout.php"] --> Auth
 Logout --> Csrf
 Dashboard["admin/index.php"] --> Auth
+Devices["admin/devices.php"] --> Auth
+Devices --> Csrf
+Devices --> Crypto["includes/crypto.php"]
+Routers["admin/routers.php"] --> Auth
+Routers --> Csrf
+Routers --> Crypto
 Auth --> Config["includes/config.php"]
 Auth --> Db["includes/db.php"]
 Csrf --> Config
 Csrf --> Helpers["includes/helpers.php"]
-Crypto["includes/crypto.php"] --> Config
+Crypto --> Config
 SessionApi["api/session.php"] --> Helpers
 SessionApi --> Db
 ```
@@ -438,6 +579,8 @@ SessionApi --> Db
 - [admin/login.php:14-18](file://admin/login.php#L14-L18)
 - [admin/logout.php:15-19](file://admin/logout.php#L15-L19)
 - [admin/index.php:14-17](file://admin/index.php#L14-L17)
+- [admin/devices.php:11-15](file://admin/devices.php#L11-L15)
+- [admin/routers.php:17-21](file://admin/routers.php#L17-L21)
 - [includes/auth.php:14-15](file://includes/auth.php#L14-L15)
 - [includes/csrf.php:12-14](file://includes/csrf.php#L12-L14)
 - [includes/crypto.php:15-15](file://includes/crypto.php#L15-L15)
@@ -447,6 +590,8 @@ SessionApi --> Db
 - [admin/login.php:14-18](file://admin/login.php#L14-L18)
 - [admin/logout.php:15-19](file://admin/logout.php#L15-L19)
 - [admin/index.php:14-17](file://admin/index.php#L14-L17)
+- [admin/devices.php:11-15](file://admin/devices.php#L11-L15)
+- [admin/routers.php:17-21](file://admin/routers.php#L17-L21)
 - [includes/auth.php:14-15](file://includes/auth.php#L14-L15)
 - [includes/csrf.php:12-14](file://includes/csrf.php#L12-L14)
 - [includes/crypto.php:15-15](file://includes/crypto.php#L15-L15)
@@ -456,13 +601,16 @@ SessionApi --> Db
 - Database performance:
   - SQLite WAL mode improves concurrency.
   - Busy timeout reduces contention under load.
-  - Indexes on login attempts and monitor samples optimize queries.
+  - Indexes on login attempts, monitor samples, and devices optimize queries.
 - Session handling:
   - Session regeneration on login prevents fixation attacks with minimal overhead.
   - Idle timeout avoids long-lived sessions unnecessarily.
 - CSRF and rate limiting:
   - Token generation uses secure random bytes once per session.
   - Rate limiting queries are indexed and pruned regularly to avoid table growth.
+- Device management:
+  - Batch operations minimize database round-trips during sync operations.
+  - Efficient MAC address lookups using indexed columns.
 
 [No sources needed since this section provides general guidance]
 
@@ -497,11 +645,22 @@ Common authentication and security issues:
 - Audit logs missing:
   - Verify that audit writes succeed and the table exists.
   - Ensure the admin ID is present for logged-in users.
+  - Check device and router management audit entries.
 
 - Router credential decryption errors:
   - Confirm the key file exists and is readable.
   - Validate the key format (raw 32 bytes, hex, or base64).
   - Check for tampered or malformed encrypted payloads.
+
+- Device management issues:
+  - Verify CSRF tokens are included in all device management forms.
+  - Check input validation for MAC addresses and status values.
+  - Review audit logs for device operations to identify unauthorized changes.
+
+- Router management problems:
+  - Ensure router passwords are properly encrypted.
+  - Verify API connection settings and credentials.
+  - Check audit logs for router operations and connection test results.
 
 **Section sources**
 - [admin/login.php:33-35](file://admin/login.php#L33-L35)
@@ -511,8 +670,10 @@ Common authentication and security issues:
 - [includes/auth.php:236-246](file://includes/auth.php#L236-L246)
 - [includes/crypto.php:25-47](file://includes/crypto.php#L25-L47)
 - [includes/crypto.php:111-137](file://includes/crypto.php#L111-L137)
+- [admin/devices.php:118-201](file://admin/devices.php#L118-L201)
+- [admin/routers.php:107-211](file://admin/routers.php#L107-L211)
 
 ## Conclusion
-The administrative panel implements a robust security model centered on hardened sessions, CSRF protection, rate limiting, audit logging, strong password hashing, and encrypted storage of sensitive credentials. By following the documented controls and guidelines, operators can maintain a secure admin interface and mitigate common attack vectors such as CSRF, brute force, session fixation, and credential exposure.
+The administrative panel implements a robust security model centered on hardened sessions, comprehensive CSRF protection, input validation, rate limiting, detailed audit logging, strong password hashing, and encrypted storage of sensitive credentials. The enhanced security implementation now includes complete protection for device and router management operations with full audit trails. By following the documented controls and guidelines, operators can maintain a secure admin interface and mitigate common attack vectors such as CSRF, brute force, session fixation, and credential exposure. The comprehensive audit logging system provides complete visibility into all administrative actions, enabling effective security monitoring and incident response.
 
 [No sources needed since this section summarizes without analyzing specific files]

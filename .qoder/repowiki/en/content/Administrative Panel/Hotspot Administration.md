@@ -20,10 +20,11 @@
 
 ## Update Summary
 **Changes Made**
-- Updated Hotspot User Management section to reflect removal of 'login-by' authentication method selection field
-- Enhanced Rate Limit Display section to document improved table view presentation
-- Corrected Uptime Limit Column documentation to show proper 'limit-uptime' attribute usage for per-user session limits
-- Updated Profile Management section to remove deprecated login-by field references
+- Enhanced Voucher Tracking section to document new voucher_log table functionality with usage logging, MAC/IP tracking, and expiration management
+- Updated Voucher Status Indicators section to explain READY/USED status system with visual badges
+- Added Voucher Lifecycle Management section covering complete workflow from generation to usage tracking
+- Enhanced User Management section to include voucher status display in users table
+- Updated troubleshooting guide with voucher-related issues and monitoring guidance
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -41,7 +42,7 @@
 This document explains the hotspot administration interface for managing MikroTik hotspot routers, users, vouchers, active sessions, and bandwidth profiles. It covers:
 - User management operations including member login support, voucher generation, and session control.
 - Active session monitoring with real-time updates and session termination.
-- Voucher system management including code generation, time-based access control, and promotional rate configurations.
+- Enhanced voucher system management including code generation, time-based access control, promotional rate configurations, and comprehensive usage tracking.
 - Interface-level traffic monitoring and bandwidth management features.
 - Daily operational tasks such as user support, session troubleshooting, and performance monitoring.
 - Common administrative workflows and best practices.
@@ -87,24 +88,24 @@ G --> H
 **Diagram sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
 - [admin/login.php:1-114](file://admin/login.php#L1-L114)
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
 **Section sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
@@ -113,6 +114,7 @@ G --> H
 - Admin authentication and session management: secure login, idle timeout, CSRF protection, rate limiting, and audit logging.
 - Router management: add/edit/delete routers, test connectivity, auto-detect REST vs Legacy API, encrypted credential storage.
 - Hotspot management: create users, bulk generate vouchers, manage hotspot profiles, view and kick active sessions.
+- Enhanced voucher tracking: comprehensive usage logging with MAC/IP tracking, status indicators (READY/USED), and expiration management.
 - Live monitoring dashboard: per-router metrics (identity, version, CPU/memory/uptime), active session count, per-interface traffic rates.
 - Portal session lookup: unauthenticated JSON endpoint returning session state by MAC address for the SBC portal.
 
@@ -120,20 +122,20 @@ Key responsibilities:
 - `admin/login.php`: standalone login page with CSRF and rate limiting.
 - `admin/index.php`: dashboard rendering and polling trigger.
 - `admin/api/monitor.php`: authenticated JSON feed for live metrics and traffic rates.
-- `admin/hotspot.php`: hotspot user/voucher/profile/session management.
+- `admin/hotspot.php`: hotspot user/voucher/profile/session management with enhanced voucher tracking.
 - `admin/routers.php`: router CRUD and connection testing.
-- `api/session.php`: portal-facing session lookup by MAC.
+- `api/session.php`: portal-facing session lookup by MAC with automatic voucher usage logging.
 - `includes/*`: configuration, database schema, auth helpers, utilities, and router client factory.
 
 **Section sources**
 - [admin/login.php:1-114](file://admin/login.php#L1-L114)
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
@@ -170,7 +172,7 @@ Dashboard-->>Browser : render cards with live values
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 
 ## Detailed Component Analysis
 
@@ -243,6 +245,99 @@ Remove --> Exit
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
+### Enhanced Voucher Tracking and Usage Logging
+The system now includes comprehensive voucher tracking capabilities through a dedicated `voucher_log` table that monitors the complete lifecycle of generated vouchers:
+
+**Voucher Log Schema:**
+- `code`: Unique voucher identifier
+- `mac`: MAC address of device that used the voucher
+- `ip`: IP address assigned during session
+- `router_id`: Associated router identifier
+- `used_at`: Timestamp when voucher was first used
+- `expires_at`: Calculated expiration timestamp based on uptime settings
+
+**Automatic Usage Tracking:**
+When a user successfully authenticates using a voucher, the system automatically logs the usage event with MAC address, IP address, and timestamp. This provides complete visibility into voucher utilization patterns.
+
+**Status Indicators System:**
+Users now display visual status indicators based on voucher usage:
+- **READY** (green badge): Voucher has been generated but not yet used
+- **USED** (gray badge): Voucher has been successfully used, showing usage timestamp and MAC address
+- **None**: No voucher tracking information available
+
+```mermaid
+flowchart TD
+Generate["Generate Voucher"] --> CreateLog["Create voucher_log entry<br/>with expires_at calculation"]
+CreateLog --> ReadyState["Status: READY"]
+ReadyState --> FirstUse["User authenticates with voucher"]
+FirstUse --> TrackUsage["Log usage with MAC/IP/timestamp"]
+TrackUsage --> UsedState["Status: USED<br/>Show usage details"]
+UsedState --> SessionActive["Session Active"]
+```
+
+**Diagram sources**
+- [admin/hotspot.php:176-183](file://admin/hotspot.php#L176-L183)
+- [api/session.php:89-103](file://api/session.php#L89-L103)
+- [includes/db.php:137-149](file://includes/db.php#L137-L149)
+
+**Section sources**
+- [admin/hotspot.php:176-183](file://admin/hotspot.php#L176-L183)
+- [admin/hotspot.php:312-321](file://admin/hotspot.php#L312-L321)
+- [admin/hotspot.php:535-546](file://admin/hotspot.php#L535-L546)
+- [api/session.php:89-103](file://api/session.php#L89-L103)
+- [includes/db.php:137-149](file://includes/db.php#L137-L149)
+
+### Voucher Lifecycle Management
+The enhanced voucher system provides complete lifecycle management from generation through usage:
+
+**Generation Phase:**
+- Vouchers are created with unique codes (no ambiguous characters)
+- Each voucher gets a corresponding entry in `voucher_log` table
+- Expiration time is calculated based on uptime settings
+- Initial status is set to READY
+
+**Usage Phase:**
+- Automatic tracking when user successfully authenticates
+- MAC address and IP address captured for audit purposes
+- Usage timestamp recorded for reporting and analytics
+- Status updated to USED with detailed usage information
+
+**Monitoring Phase:**
+- Real-time status indicators in user management interface
+- Visual distinction between unused (READY) and used (USED) vouchers
+- Usage history available for reporting and troubleshooting
+
+```mermaid
+stateDiagram-v2
+[*] --> Generated
+Generated --> READY : Created in voucher_log
+READY --> USED : First successful authentication
+USED --> [*] : Session ends
+note right of GENERATED
+Code generated
+voucher_log entry created
+expires_at calculated
+end note
+note right of READY
+Status : READY
+Available for use
+No usage recorded
+end note
+note right of USED
+Status : USED
+MAC/IP tracked
+Usage timestamp recorded
+end note
+```
+
+**Diagram sources**
+- [admin/hotspot.php:159-209](file://admin/hotspot.php#L159-L209)
+- [api/session.php:89-103](file://api/session.php#L89-L103)
+
+**Section sources**
+- [admin/hotspot.php:159-209](file://admin/hotspot.php#L159-L209)
+- [api/session.php:89-103](file://api/session.php#L89-L103)
+
 ### Hotspot User Management and Voucher Generation
 - Single user creation: username/password, profile selection, optional comment, optional per-user uptime limit.
 - Bulk voucher generator: prefix, count, code length, profile, optional comment, optional uptime limit. Codes are generated without ambiguous characters and used as both username and password.
@@ -252,6 +347,7 @@ Voucher behavior:
 - Each generated voucher is pushed to the router as a hotspot user.
 - Per-user uptime-limit can be set; otherwise profile settings apply.
 - Batch results show created codes and any failures.
+- **Enhanced**: Automatic voucher tracking with usage logging and status indicators.
 
 **Updated** Removed 'login-by' authentication method selection field from user creation forms. Users now inherit authentication methods from their assigned profiles.
 
@@ -276,7 +372,7 @@ AuditBulk --> End
 - [admin/hotspot.php:364-493](file://admin/hotspot.php#L364-L493)
 
 **Section sources**
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 
 ### Active Session Monitoring and Termination
 - Active sessions tab lists connected users with MAC, IP, uptime, and bytes in/out.
@@ -422,10 +518,12 @@ Prune --> Respond["Return JSON with online status, metrics, interfaces"]
 - Unauthenticated JSON endpoint returns whether a given MAC has an active session on any enabled router.
 - Normalizes MAC input and safely iterates routers; errors are suppressed to avoid leaking details.
 - Returns user, uptime, bytes_in/out, and time_left when available.
+- **Enhanced**: Automatically marks vouchers as used in voucher_log when successful authentication occurs.
 
 Use cases:
 - SBC portal displays live session status to the end user.
 - Useful for diagnosing why a device cannot connect despite valid credentials.
+- Provides automatic voucher usage tracking for audit and reporting purposes.
 
 ```mermaid
 sequenceDiagram
@@ -441,15 +539,16 @@ API->>Factory : aircoins_router_client
 Factory->>Router : findActiveByMac(mac)
 Router-->>Factory : session or none
 end
+API->>DB : UPDATE voucher_log SET used_at/mac/ip WHERE code=user
 API-->>Portal : {connected : true/false, user, uptime, bytes_in, bytes_out, time_left}
 ```
 
 **Diagram sources**
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
 **Section sources**
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 
 ## Dependency Analysis
 The admin pages depend on shared modules for configuration, database access, authentication, and utilities. Router interactions are abstracted behind a factory that chooses between REST and Legacy clients.
@@ -478,24 +577,24 @@ Helpers --> Session
 
 **Diagram sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
 **Section sources**
 - [admin/index.php:1-154](file://admin/index.php#L1-L154)
-- [admin/hotspot.php:1-701](file://admin/hotspot.php#L1-L701)
+- [admin/hotspot.php:1-733](file://admin/hotspot.php#L1-L733)
 - [admin/routers.php:1-455](file://admin/routers.php#L1-L455)
 - [admin/api/monitor.php:1-188](file://admin/api/monitor.php#L1-L188)
-- [api/session.php:1-107](file://api/session.php#L1-L107)
+- [api/session.php:1-123](file://api/session.php#L1-L123)
 - [includes/config.php:1-44](file://includes/config.php#L1-L44)
-- [includes/db.php:1-117](file://includes/db.php#L1-L117)
+- [includes/db.php:1-150](file://includes/db.php#L1-L150)
 - [includes/auth.php:1-282](file://includes/auth.php#L1-L282)
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 - [includes/RouterOS/RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
@@ -506,8 +605,7 @@ Helpers --> Session
 - Database uses WAL mode and sane busy timeout to reduce contention.
 - Avoid large bulk voucher generations during peak traffic; consider off-peak scheduling.
 - Rate limits protect login endpoints but may affect operators with multiple failed attempts; advise resetting after successful login.
-
-[No sources needed since this section provides general guidance]
+- **Enhanced**: Voucher tracking adds minimal overhead; usage logging occurs only on successful authentication.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -516,23 +614,26 @@ Common issues and resolutions:
 - Voucher creation fails: verify profile exists and permissions; first failure aborts further generation.
 - No active sessions: confirm hotspot service is running on router; check MAC lookup via portal API.
 - High CPU/memory: review router identity/version/board-name and monitor trends over time.
+- Voucher shows READY but user cannot connect: verify voucher hasn't expired and profile permissions are correct.
+- Voucher shows USED but user reports never used it: check voucher_log for MAC/IP mismatch or timing discrepancies.
 
 Operational tips:
 - Use audit logs to trace who created/deleted users or kicked sessions.
 - Keep profiles minimal and well-named; reuse them across users and vouchers.
 - When troubleshooting bandwidth, compare interface rates with active session counts.
 - Verify that per-user `limit-uptime` values are correctly applied and not conflicting with profile `uptime-limit` settings.
+- Monitor voucher status indicators (READY/USED) to track voucher utilization patterns.
+- Use voucher_log entries to identify which devices used specific vouchers for security auditing.
 
 **Section sources**
 - [admin/routers.php:116-141](file://admin/routers.php#L116-L141)
 - [admin/hotspot.php:159-201](file://admin/hotspot.php#L159-L201)
 - [admin/api/monitor.php:164-177](file://admin/api/monitor.php#L164-L177)
 - [api/session.php:58-83](file://api/session.php#L58-L83)
+- [admin/hotspot.php:535-546](file://admin/hotspot.php#L535-L546)
 
 ## Conclusion
-The hotspot administration interface provides a comprehensive toolkit for managing MikroTik hotspot deployments. Operators can securely authenticate, configure routers, create and manage hotspot users and vouchers, monitor active sessions, and analyze interface-level traffic. Profiles enable fine-grained control over session duration and bandwidth. Following the recommended workflows and best practices ensures reliable daily operations and scalable hotspot management.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The hotspot administration interface provides a comprehensive toolkit for managing MikroTik hotspot deployments. Operators can securely authenticate, configure routers, create and manage hotspot users and vouchers, monitor active sessions, and analyze interface-level traffic. The enhanced voucher tracking system provides complete visibility into voucher lifecycle management with automatic usage logging, status indicators, and comprehensive audit trails. Profiles enable fine-grained control over session duration and bandwidth. Following the recommended workflows and best practices ensures reliable daily operations and scalable hotspot management.
 
 ## Appendices
 
@@ -540,15 +641,19 @@ The hotspot administration interface provides a comprehensive toolkit for managi
 - Morning check:
   - Open dashboard and verify all routers are online.
   - Review active session counts and interface traffic rates.
+  - Check voucher status indicators for any unexpected USED statuses.
 - User support:
   - Locate user by MAC using portal session lookup.
   - If needed, kick session and guide user to re-login.
+  - Check voucher_log for usage history if user claims voucher didn't work.
 - Voucher distribution:
   - Generate vouchers with appropriate profile and uptime limit.
   - Distribute codes securely; track batch comments for auditing.
+  - Monitor READY/USED status indicators to track voucher utilization.
 - Performance monitoring:
   - Watch CPU/memory and uptime trends.
   - Investigate spikes in interface traffic and correlate with sessions.
+  - Analyze voucher usage patterns for capacity planning.
 
 ### Best Practices
 - Use REST API where supported; fall back to Legacy only when necessary.
@@ -558,5 +663,5 @@ The hotspot administration interface provides a comprehensive toolkit for managi
 - Regularly review audit logs for anomalies.
 - Configure appropriate rate limits and session timeouts through profiles.
 - Monitor the distinction between per-user `limit-uptime` and profile `uptime-limit` settings.
-
-[No sources needed since this section provides general guidance]
+- Leverage voucher status indicators (READY/USED) to track voucher utilization and identify potential security issues.
+- Use voucher_log entries for comprehensive audit trails and usage analytics.
