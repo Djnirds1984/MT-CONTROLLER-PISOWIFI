@@ -106,7 +106,10 @@ class RestClient implements RouterClient
     /** @inheritDoc */
     public function addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array
     {
-        $body = ['name' => $name, 'password' => $pass, 'profile' => $profile];
+        $body = ['name' => $name, 'password' => $pass];
+        if ($profile !== '') {
+            $body['profile'] = $profile;
+        }
         if ($comment !== '') {
             $body['comment'] = $comment;
         }

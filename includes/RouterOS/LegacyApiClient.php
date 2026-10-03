@@ -483,7 +483,10 @@ class LegacyApiClient implements RouterClient
     /** @inheritDoc */
     public function addHotspotUser(string $name, string $pass, string $profile, string $comment = '', string $uptimeLimit = ''): array
     {
-        $attrs = ['name' => $name, 'password' => $pass, 'profile' => $profile];
+        $attrs = ['name' => $name, 'password' => $pass];
+        if ($profile !== '') {
+            $attrs['profile'] = $profile;
+        }
         if ($comment !== '') {
             $attrs['comment'] = $comment;
         }

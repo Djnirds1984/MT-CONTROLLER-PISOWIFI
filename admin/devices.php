@@ -175,10 +175,48 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $status = 'active';
         }
         try {
+            // Fetch current device row to get MAC and router_id.
+            $stmt = $pdo->prepare('SELECT * FROM devices WHERE id = :id LIMIT 1');
+            $stmt->execute([':id' => $id]);
+            $device = $stmt->fetch();
+
             $upd = $pdo->prepare('UPDATE devices SET hostname = :host, ip_address = :ip, status = :status, session_time = :st, updated_at = :now WHERE id = :id');
             $upd->execute([':host' => $hostname, ':ip' => $ip, ':status' => $status, ':st' => $sessTime, ':now' => time(), ':id' => $id]);
-            aircoins_audit($pdo, $adminId, 'device_edit', 'device #' . $id);
-            aircoins_flash('success', 'Device updated.');
+
+            // Push session time to router as a hotspot user (MAC auth).
+            $mac = (string) ($device['mac_address'] ?? '');
+            $routerId = (int) ($device['router_id'] ?? 0);
+            $pushMsg = '';
+            if ($mac !== '' && $routerId > 0 && $sessTime !== '') {
+                $router = aircoins_get_router($pdo, $routerId);
+                if ($router) {
+                    try {
+                        $client = aircoins_router_client($router);
+                        // MAC without colons as username (matches MikroTik convention).
+                        $macUser = str_replace(':', '', $mac);
+                        // Check if user already exists on router.
+                        $existingUsers = $client->hotspotUsers();
+                        $existingId = null;
+                        foreach ($existingUsers as $eu) {
+                            if ((string) ($eu['name'] ?? '') === $macUser) {
+                                $existingId = (string) ($eu['.id'] ?? '');
+                                break;
+                            }
+                        }
+                        if ($existingId !== null) {
+                            // Delete old user, recreate with new limit-uptime.
+                            $client->deleteHotspotUser($existingId);
+                        }
+                        $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
+                        $pushMsg = ' Session time pushed to router (' . $sessTime . ').';
+                    } catch (Throwable $re) {
+                        $pushMsg = ' (Router push failed: ' . $re->getMessage() . ')';
+                    }
+                }
+            }
+
+            aircoins_audit($pdo, $adminId, 'device_edit', 'device #' . $id . $pushMsg);
+            aircoins_flash('success', 'Device updated.' . $pushMsg);
         } catch (Throwable $e) {
             aircoins_flash('error', 'Update failed: ' . $e->getMessage());
         }
