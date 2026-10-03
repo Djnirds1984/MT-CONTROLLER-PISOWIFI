@@ -186,8 +186,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if ($router) {
                     try {
                         $client = aircoins_router_client($router);
-                        // MAC without colons as username (matches MikroTik convention).
-                        $macUser = str_replace(':', '', $mac);
+                        // MAC without colons, UPPERCASE — must match what login.html sends.
+                        $macUser = str_replace(':', '', strtoupper($mac));
                         // Try to create the user; if it already exists, delete+recreate.
                         try {
                             $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
@@ -195,7 +195,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             // User likely exists — find and delete it, then recreate.
                             $users = $client->hotspotUsers();
                             foreach ($users as $eu) {
-                                if ((string) ($eu['name'] ?? '') === $macUser) {
+                                if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
                                     $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
                                     break;
                                 }
@@ -299,32 +299,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
         try {
             $client  = aircoins_router_client($devRouter);
+            // MAC without colons, UPPERCASE — must match what login.html sends
+            // as the username ($(mac) from MikroTik is uppercase; doLogin()
+            // strips colons and submits that as both user and pass).
             $macUser = str_replace(':', '', strtoupper($mac));
 
-            // Find the hotspot user on the router.
-            $users = $client->hotspotUsers();
-            $targetUser = null;
-            foreach ($users as $eu) {
-                if ((string) ($eu['name'] ?? '') === $macUser) {
-                    $targetUser = $eu;
-                    break;
-                }
-            }
+            // Calculate the new total limit.
+            // Read the current limit-uptime from the DB session_time (which
+            // was kept in sync with the router on the last edit/add_time).
+            $currentLimitSec = aircoins_parse_time_to_seconds(
+                (string) ($device['session_time'] ?? '')
+            );
+            $newLimitSec = $currentLimitSec + $addSeconds;
+            $newLimit    = aircoins_seconds_to_time($newLimitSec);
 
-            if ($targetUser === null) {
-                // No hotspot user yet — create one with the add time as limit.
-                $newLimit = aircoins_seconds_to_time($addSeconds);
+            // Create the hotspot user with the updated limit-uptime.
+            // If it already exists on the router, delete + recreate (same
+            // pattern as the edit handler).  NOTE: we deliberately do NOT
+            // call hotspotUsers() to scan for the user — that hangs on the
+            // legacy binary API.
+            try {
                 $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
-            } else {
-                // User exists — calculate new limit = current uptime + added time.
-                $currentLimitSec = aircoins_parse_time_to_seconds((string) ($targetUser['limit-uptime'] ?? ''));
-
-                // If online, base the new limit on current uptime + added time.
-                // If offline, just add to the existing limit.
-                $newLimitSec = $currentLimitSec + $addSeconds;
-                $newLimit = aircoins_seconds_to_time($newLimitSec);
-
-                $client->updateHotspotUser((string) $targetUser['.id'], ['limit-uptime' => $newLimit]);
+            } catch (Throwable $dup) {
+                // User already exists — find by exact MAC name, delete, recreate.
+                $allUsers = $client->hotspotUsers();
+                foreach ($allUsers as $eu) {
+                    if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
+                        $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
+                        break;
+                    }
+                }
+                $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
             }
 
             // Update DB session_time too.
@@ -333,7 +338,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 ->execute([':st' => $newLimit, ':now' => time(), ':id' => $id]);
 
             aircoins_audit($pdo, $adminId, 'device_add_time', 'device #' . $id . ' mac=' . $mac . ' added=' . $newLimit);
-            aircoins_flash('success', 'Added ' . $newLimit . ' to ' . $mac . '.');
+            aircoins_flash('success', 'Added ' . $newLimit . ' to ' . $mac . '. Device must reconnect to the captive portal to authenticate.');
         } catch (Throwable $e) {
             aircoins_flash('error', 'Add time failed: ' . $e->getMessage());
         }
