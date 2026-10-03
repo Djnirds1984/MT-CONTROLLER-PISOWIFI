@@ -71,7 +71,107 @@ Ubuntu 24.04.
 
 ---
 
-## 3. End-to-end redirect flow (numbered)
+## 3. Quick start — SBC on the hotspot bridge
+
+For the common topology where the SBC is plugged into the **same bridge** that
+carries the hotspot (no separate management VLAN):
+
+```
+Internet
+   |
+[ether1] --- MikroTik RouterOS --- [bridge-hotspot] ---+--- SBC (192.168.88.10)
+                   |                                   |
+              Hotspot server                      lighttpd :80 (portal)
+              API (8728/443)                      lighttpd :443 (admin)
+                                                   |
+                                              +----+----+
+                                              | WiFi AP |--- clients
+                                              +---------+
+```
+
+### Step-by-step
+
+1. **Give the SBC a static IP on the hotspot bridge network.**
+   Example: bridge is `192.168.88.0/24`, gateway `192.168.88.1`, DHCP pool `.100–.254` → set the SBC to `192.168.88.10`.
+   The SBC IP **must be outside** the hotspot DHCP pool.
+
+   **Ubuntu (Netplan)** — `/etc/netplan/01-static.yaml`:
+   ```yaml
+   network:
+     version: 2
+     ethernets:
+       eth0:
+         addresses: [192.168.88.10/24]
+         routes: [{to: default, via: 192.168.88.1}]
+         nameservers: {addresses: [192.168.88.1]}
+   ```
+   `sudo netplan apply`
+
+   **Debian / Armbian** — `/etc/network/interfaces`:
+   ```
+   auto eth0
+   iface eth0 inet static
+       address 192.168.88.10/24
+       gateway 192.168.88.1
+   ```
+   `sudo systemctl restart networking`
+
+2. **Clone and install on the SBC:**
+   ```bash
+   sudo apt-get install -y git
+   git clone https://github.com/Djnirds1984/MT-CONTROLLER-PISOWIFI.git
+   cd MT-CONTROLLER-PISOWIFI
+   sudo bash deploy/scripts/install-sbc.sh
+   ```
+   The installer prompts for an admin username/password — **remember these**. (Details: section 6.)
+
+3. **Edit the RouterOS script variables** — open `deploy/mikrotik/hotspot-external-portal.rsc` and set:
+   | Variable | Value |
+   |---|---|
+   | `sbcIP` | Your SBC static IP (e.g. `192.168.88.10`) |
+   | `hsInterface` | Bridge carrying the hotspot (e.g. `bridge-hotspot` or `bridge1`) |
+   | `hsNet` / `hsAddress` / `gwIP` | Match your existing network |
+   | `hsPoolRange` | e.g. `192.168.88.100-192.168.88.254` |
+   | `wanInterface` | Internet uplink (e.g. `ether1`) |
+
+4. **Apply the MikroTik configuration** — in WinBox terminal or SSH:
+   ```
+   /import file-name=hotspot-external-portal.rsc
+   ```
+   Or paste the script contents directly. This sets up: hotspot profile (`login-by=http-pap,cookie`), walled garden (clients can reach SBC port 80), ip-binding (bypasses SBC), DHCP, NAT, and enables the API service. (Details: section 7.)
+
+5. **Upload the router stubs** — edit each file in `router-stubs/`, replace `192.168.88.10` with your actual SBC IP, then upload to the router's `/hotspot` directory (WinBox → Files → drag & drop):
+
+   | Local file | Upload to router |
+   |---|---|
+   | `router-stubs/login.html` | `/hotspot/login.html` |
+   | `router-stubs/alogin.html` | `/hotspot/alogin.html` |
+   | `router-stubs/error.html` | `/hotspot/error.html` |
+   | `router-stubs/logout.html` | `/hotspot/logout.html` |
+
+6. **Copy JuanFi assets** (if not already in the repo) — from the router's existing `/hotspot/assets/` folder, copy `js/core.js`, `js/config.js`, and the Bootstrap files into `hotspot/assets/` on the SBC (`/var/www/aircoins/portal/assets/`). These are required for the voucher modals and coin logic.
+
+7. **Enable the router API service** (pick one per router):
+   * REST (RouterOS v7): `/ip service enable www-ssl` (port 443)
+   * Legacy (v6 or v7): `/ip service enable api` (port 8728, usually already on)
+
+   See section 8 for REST vs Legacy details.
+
+8. **Add the router in the admin panel** — open `https://<SBC_IP>/` (accept the self-signed cert warning), log in with the credentials from step 2, go to **Routers → Add router**:
+   * Name: e.g. `Hotspot-Router`
+   * Host: the router's bridge IP (e.g. `192.168.88.1`)
+   * API type: REST or Legacy (use **Auto-detect**)
+   * Username/password: your RouterOS admin credentials
+   * Click **Test connection** to verify, then **Save**. (Details: section 9.)
+
+9. **Test the flow** — connect a phone/laptop to the hotspot SSID:
+   * It should get a DHCP address, then redirect to `http://<SBC_IP>/login.html?mac=...&ip=...`
+   * Generate a voucher in the admin panel (Hotspot → Vouchers tab), enter it on the portal, submit.
+   * The client should come online and land on the status page with a live countdown.
+
+---
+
+## 4. End-to-end redirect flow (numbered)
 
 1. **Association + DHCP** — the client joins the hotspot interface; MikroTik's DHCP server (`.rsc` section 2) leases an address from `hs-pool` (SBC IP is kept outside the pool).
 2. **First HTTP hit is intercepted** — the hotspot redirects the browser to the router's own `/hotspot/login.html`.
@@ -84,7 +184,7 @@ Ubuntu 24.04.
 
 ---
 
-## 4. Prerequisites
+## 5. Prerequisites
 
 ### Hardware
 * An SBC with ≥ 512 MB RAM and a microSD/eMMC (Orange Pi Zero/PC, Raspberry Pi 3/4, etc.).
@@ -113,9 +213,9 @@ Ubuntu 24.04.
 
 ---
 
-## 5. SBC installation
+## 6. SBC installation
 
-### 5.1 One-shot installer (recommended)
+### 6.1 One-shot installer (recommended)
 
 Get the repository onto the SBC (git clone, or scp it from another machine), then run:
 
@@ -140,7 +240,7 @@ The installer is **idempotent** and does, in order:
 9. `ufw allow 80/tcp,443/tcp` and reloads ufw **only if already active** (never auto-enables, to avoid locking out SSH).
 10. `lighttpd -t -f /etc/lighttpd/lighttpd.conf`, then `systemctl enable --now lighttpd`, and prints a verification checklist.
 
-### 5.2 Manual fallback (if you can't run the script)
+### 6.2 Manual fallback (if you can't run the script)
 
 ```bash
 # 1) packages (adjust 8.2 -> your PHP version)
@@ -185,14 +285,14 @@ sudo systemctl restart php8.2-fpm
 sudo lighttpd -t -f /etc/lighttpd/lighttpd.conf && sudo systemctl enable --now lighttpd
 ```
 
-### 5.3 How lighttpd + php-fpm fit together
+### 6.3 How lighttpd + php-fpm fit together
 
 * **lighttpd** is the only listener on ports 80 and 443. It serves the static portal directly and forwards `.php` requests to **php-fpm** over a UNIX socket (`fastcgi.server` in `aircoins.conf`).
 * **php-fpm** runs a dedicated `[aircoins]` pool (`pm = ondemand`, `max_children = 5`) on `/run/php/php<FPMVER>-fpm-aircoins.sock`. `ondemand` means workers spawn only on traffic — near-zero idle RAM.
 * The `/api/` alias (port 80 only) maps `/api/session.php` to `app/api/session.php`, which lives **outside** the portal docroot; `check-local = disable` + `broken-scriptfilename = enable` make that work.
 * On port **443** the docroot is `app/admin/`, so admin relative URLs (`assets/…`, `api/monitor.php`, `routers.php`) resolve correctly and `/api/monitor.php` maps to `admin/api/monitor.php`.
 
-### 5.4 Verification checklist
+### 6.4 Verification checklist
 
 ```bash
 curl -I  http://localhost/                                   # 200, login.html
@@ -205,12 +305,12 @@ systemctl status lighttpd php*-fpm --no-pager
 
 ---
 
-## 6. MikroTik redirect configuration (the core step)
+## 7. MikroTik redirect configuration (the core step)
 
 Two things must happen on the router: **(a)** apply the hotspot/walled-garden/service
 config, and **(b)** upload the thin redirect **stubs**.
 
-### 6.1 Paste-ready script — `deploy/mikrotik/hotspot-external-portal.rsc`
+### 7.1 Paste-ready script — `deploy/mikrotik/hotspot-external-portal.rsc`
 
 The repo ships a complete, commented RouterOS script. **Edit the site variables at
 the top first** (section 0), then paste it into WinBox **New Terminal** (or SSH),
@@ -245,7 +345,7 @@ What the script configures (section by section):
 9. **NAT** — `srcnat` masquerade out `wanInterface`.
 10. **Final step** — upload the stubs (below).
 
-### 6.2 WinBox equivalents (if you prefer clicking)
+### 7.2 WinBox equivalents (if you prefer clicking)
 
 | Task | WinBox path |
 |---|---|
@@ -261,7 +361,7 @@ What the script configures (section by section):
 | NAT | **IP → Firewall → NAT** → add `chain=srcnat`, `out-interface=ether1`, `action=masquerade` |
 | Upload stubs | **Files** → drag & drop into `/hotspot` |
 
-### 6.3 Upload the router stubs (which file replaces which)
+### 7.3 Upload the router stubs (which file replaces which)
 
 The router keeps **only** four thin pages; everything else (portal, PHP, assets)
 lives on the SBC. Before uploading, **edit each stub and replace `192.168.88.10`
@@ -277,21 +377,21 @@ refresh>` URL and the JS `location.replace()` URL — keep them identical).
 
 > The heavy `hotspot/` assets (`css/`, `js/`, `img/`, `status.html`, JuanFi `assets/`) are **NOT** uploaded to the router — they are served from the SBC.
 
-### 6.4 Walled garden & IP binding — why both
+### 7.4 Walled garden & IP binding — why both
 
 * **Walled garden (`action=accept`)** allows a *not-yet-authenticated* client to open `http://<SBC_IP>:80` so the login page itself can load. Use `action=accept` — `allow` is only valid on host-name (non-`ip`) walled-garden rules.
 * **IP binding (`type=bypassed`)** exempts the **SBC's own** traffic from hotspot interception, so the SBC is always reachable and can always talk to the router API. Without it you can get redirect loops between the router stub and the SBC.
 * If admins browse the panel **from the hotspot side**, also walled-garden `dst-port=443` (commented in the `.rsc`). Normally admin traffic comes from the management network and doesn't need it.
 
-### 6.5 Profile & services per API type
+### 7.5 Profile & services per API type
 
 * **Profile** must use `login-by=http-pap,cookie`. CHAP is impractical for an external page (the router generates the challenge per request), so the portal submits the voucher in **plaintext PAP** over the isolated hotspot LAN. `cookie` keeps the client logged in for the session.
-* **Services** — enable only what the admin panel uses for that router: `www-ssl` for **REST** (v7, needs a certificate; RouterOS auto-generates a self-signed one), `api`/`api-ssl` for **Legacy** (usually already enabled). See section 7.
+* **Services** — enable only what the admin panel uses for that router: `www-ssl` for **REST** (v7, needs a certificate; RouterOS auto-generates a self-signed one), `api`/`api-ssl` for **Legacy** (usually already enabled). See section 8.
 
 ---
 
 
-## 7. REST vs Legacy API — which is which
+## 8. REST vs Legacy API — which is which
 
 The admin panel can talk to a router over **two** different MikroTik APIs. You
 choose per-router when adding it (radio: *REST API* / *Legacy API*). The
@@ -314,14 +414,14 @@ choose per-router when adding it (radio: *REST API* / *Legacy API*). The
 
 ---
 
-## 8. Admin panel — first login & Add Router
+## 9. Admin panel — first login & Add Router
 
 Open **`https://<SBC_IP>/`** (accept the self-signed-certificate warning).
 
-### 8.1 First login
+### 9.1 First login
 Use the username/password you created during install (step 8 of the installer). If you skipped it, create one with the `php -r` snippet the installer printed. Login is **rate-limited** (5 failures / 300s per IP) and every attempt is audited. Sessions idle out after 15 minutes.
 
-### 8.2 Add Router walkthrough (`routers.php` → *Add router*)
+### 9.2 Add Router walkthrough (`routers.php` → *Add router*)
 
 | Field | What to enter |
 |---|---|
@@ -337,10 +437,10 @@ Use the username/password you created during install (step 8 of the installer). 
 * **Test connection** — validates credentials and reports identity/version without saving.
 * **Save** — the password is encrypted (`aircoins_encrypt()`), the row is stored, and the action is written to the audit log.
 
-### 8.3 Dashboard (`index.php`)
+### 9.3 Dashboard (`index.php`)
 One live card per **enabled** router: identity, RouterOS version, CPU load, memory used, uptime, active-session count, and per-interface traffic rates. `assets/admin.js` polls `api/monitor.php` every 10s; a monitor failure flips that card to an error state without breaking the page.
 
-### 8.4 Hotspot & vouchers (`hotspot.php`)
+### 9.4 Hotspot & vouchers (`hotspot.php`)
 Pick a router, then use the tabs:
 * **Users** — list / add / delete hotspot users.
 * **Vouchers** — bulk generator: *prefix + count + profile* → creates hotspot users via the API and records the batch.
@@ -350,7 +450,7 @@ All POSTs are CSRF-protected; all output is escaped; all queries are prepared st
 
 ---
 
-## 9. Portal customization
+## 10. Portal customization
 
 The portal is the `hotspot/` tree (deployed to `/var/www/aircoins/portal`). Edit it in the repo, then re-sync with `deploy/scripts/update-portal.sh` (no service restart needed — lighttpd serves static files from disk).
 
@@ -370,7 +470,7 @@ sudo bash deploy/scripts/update-portal.sh /path/to/MT-CONTROLLER-PISOWIFI
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 **Port 80 already in use (apache2 / nginx / pi-hole / dnsmasq).**
 `sudo ss -tlnp | grep ':80'` to find the culprit. The installer disables `apache2`/`nginx`. For Pi-hole/pihole-FTL or another lighttpd, stop/disable it or move AIRCOINS to a different box. `sudo systemctl disable --now apache2 nginx`.
@@ -405,7 +505,7 @@ Some Armbian images use an overlay or `armbian-config` network manager that can 
 
 ---
 
-## 11. File structure
+## 12. File structure
 
 ### Repository (source)
 ```
@@ -458,7 +558,7 @@ MT-CONTROLLER-PISOWIFI/
 
 ---
 
-## 12. Security notes
+## 13. Security notes
 
 * **Admin passwords — Argon2id.** Stored via `aircoins_hash()` (Argon2id, bcrypt fallback). Never stored or logged in plaintext; hashes auto-upgrade on login (`aircoins_needs_rehash()`).
 * **Router passwords — sodium at rest.** Encrypted with XSalsa20-Poly1305 (`sodium_crypto_secretbox`) using a 32-byte key at `/etc/aircoins/secret.key` (`0400 www-data`, outside the web root). Decrypted only in memory for a single API call. **Back up this key** — losing it makes stored router passwords unrecoverable; rotating it invalidates them.
