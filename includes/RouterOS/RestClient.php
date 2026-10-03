@@ -281,7 +281,7 @@ class RestClient implements RouterClient
 
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Accept: application/json']);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Accept: application/json', 'Expect:']);
         curl_setopt($ch, CURLOPT_USERPWD, $this->username . ':' . $this->password);
         curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -459,14 +459,41 @@ class RestClient implements RouterClient
     /** @inheritDoc */
     public function uploadHotspotStub(string $path, string $content): bool
     {
-        // RouterOS REST /file expects base64-encoded contents.
-        // File uploads need a longer timeout — routers are slow at writing flash.
-        $body = [
-            'name'     => $path,
-            'contents' => base64_encode($content),
-        ];
-        $this->put('/file', $body, 30);
+        // PUT /rest/file is ADD-only — it fails when the file already exists.
+        // Strategy: find the file's .id; PATCH its contents if found, PUT if not.
+        $encoded = base64_encode($content);
+        $fileId  = $this->findFileId($path);
+
+        if ($fileId !== null) {
+            // File exists — overwrite contents via PATCH.
+            $this->request('PATCH', '/file/' . $fileId, ['contents' => $encoded], null, 30);
+        } else {
+            // File does not exist yet — create via PUT.
+            $this->request('PUT', '/file', ['name' => $path, 'contents' => $encoded], null, 30);
+        }
         return true;
+    }
+
+    /**
+     * Look up a file's RouterOS .id by its full name/path.
+     *
+     * @param string $name Full file path (e.g. "flash/hotspot/login.html").
+     * @return string|null The .id (e.g. "*5") or null when not found.
+     */
+    private function findFileId(string $name): ?string
+    {
+        try {
+            $rows = $this->get('/file');
+            foreach (self::asList($rows) as $r) {
+                if ((string) ($r['name'] ?? '') === $name) {
+                    $id = (string) ($r['.id'] ?? '');
+                    return $id !== '' ? $id : null;
+                }
+            }
+        } catch (Throwable $e) {
+            // Listing failed — fall through to PUT attempt.
+        }
+        return null;
     }
 
     /** @inheritDoc */
