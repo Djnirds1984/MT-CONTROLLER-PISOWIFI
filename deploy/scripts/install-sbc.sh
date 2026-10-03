@@ -151,21 +151,32 @@ BASE_PKGS=(lighttpd openssl ufw ca-certificates)
 info "Installing base packages: ${BASE_PKGS[*]}"
 apt-get install -y "${BASE_PKGS[@]}"
 
-# Versioned PHP packages (php-sodium is REQUIRED by includes/crypto.php and the
-# key generation below; php-curl by the REST client; php-mbstring by helpers).
+# Versioned PHP packages (php-curl for the REST client, php-mbstring for helpers).
+# NOTE: sodium is built into PHP core since 7.2 — no separate package needed.
 PHP_PKGS=(
     "php${PHP_HINT}-fpm"
     "php${PHP_HINT}-cli"
     "php${PHP_HINT}-sqlite3"
     "php${PHP_HINT}-curl"
     "php${PHP_HINT}-mbstring"
-    "php${PHP_HINT}-sodium"
 )
 if apt-get install -y "${PHP_PKGS[@]}"; then
     ok "Installed versioned PHP packages (${PHP_HINT})."
 else
     warn "Versioned php${PHP_HINT}-* not available; falling back to metapackages."
-    apt-get install -y php-fpm php-cli php-sqlite3 php-curl php-mbstring php-sodium
+    apt-get install -y php-fpm php-cli php-sqlite3 php-curl php-mbstring
+fi
+
+# Verify sodium extension is available (built into PHP core since 7.2)
+if ! php -m 2>/dev/null | grep -qi sodium; then
+    info "sodium not detected; trying php-libsodium as fallback ..."
+    apt-get install -y php-libsodium 2>/dev/null || true
+fi
+if ! php -m 2>/dev/null | grep -qi sodium; then
+    echo "[!] WARNING: PHP sodium extension not detected."
+    echo "    On most systems sodium is built into PHP core (>= 7.2)."
+    echo "    If missing, install manually: sudo apt-get install php-libsodium"
+    echo "    The admin panel requires sodium for router password encryption."
 fi
 
 # Authoritative PHP version now that php-cli is installed.
