@@ -511,7 +511,7 @@ aircoins_header('Hotspot', 'hotspot');
                   <td class="mono"><?php echo e((string) ($u['.id'] ?? '')); ?></td>
                   <td><strong><?php echo e((string) ($u['name'] ?? '')); ?></strong></td>
                   <td><?php echo e((string) ($u['profile'] ?? '')); ?></td>
-                  <td class="mono"><?php echo e((string) ($u['uptime-limit'] ?? '')); ?></td>
+                  <td class="mono"><?php echo e((string) ($u['limit-uptime'] ?? '')); ?></td>
                   <td class="hint"><?php echo e((string) ($u['comment'] ?? '')); ?></td>
                   <td>
                     <?php if (!empty($u['disabled'])): ?>

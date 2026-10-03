@@ -473,7 +473,7 @@ class LegacyApiClient implements RouterClient
                 'name'         => (string) ($r['name'] ?? ''),
                 'profile'      => (string) ($r['profile'] ?? ''),
                 'comment'      => (string) ($r['comment'] ?? ''),
-                'uptime-limit' => (string) ($r['uptime-limit'] ?? ''),
+                                'limit-uptime' => (string) ($r['limit-uptime'] ?? ''),
                 'disabled'     => self::toBool($r['disabled'] ?? 'false'),
             ];
         }
@@ -488,7 +488,7 @@ class LegacyApiClient implements RouterClient
             $attrs['comment'] = $comment;
         }
         if ($uptimeLimit !== '') {
-            $attrs['uptime-limit'] = $uptimeLimit;
+            $attrs['limit-uptime'] = $uptimeLimit;
         }
         $res = $this->exec('/ip/hotspot/user/add', $attrs);
         $id  = (string) ($res['done']['ret'] ?? $res['done']['.id'] ?? '');

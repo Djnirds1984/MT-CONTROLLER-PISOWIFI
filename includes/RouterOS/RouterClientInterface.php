@@ -50,7 +50,7 @@ interface RouterClient
 
     /**
      * @return array<int,array<string,mixed>> All hotspot users.
-     *   Each entry: '.id', 'name', 'profile', 'comment', 'uptime-limit', 'disabled'.
+     *   Each entry: '.id', 'name', 'profile', 'comment', 'limit-uptime', 'disabled'.
      */
     public function hotspotUsers(): array;
 

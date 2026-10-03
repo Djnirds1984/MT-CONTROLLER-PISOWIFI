@@ -96,7 +96,7 @@ class RestClient implements RouterClient
                 'name'         => (string) ($r['name'] ?? ''),
                 'profile'      => (string) ($r['profile'] ?? ''),
                 'comment'      => (string) ($r['comment'] ?? ''),
-                'uptime-limit' => (string) ($r['uptime-limit'] ?? ''),
+                                'limit-uptime' => (string) ($r['limit-uptime'] ?? ''),
                 'disabled'     => self::toBool($r['disabled'] ?? false),
             ];
         }
@@ -111,7 +111,7 @@ class RestClient implements RouterClient
             $body['comment'] = $comment;
         }
         if ($uptimeLimit !== '') {
-            $body['uptime-limit'] = $uptimeLimit;
+            $body['limit-uptime'] = $uptimeLimit;
         }
         $d = $this->put('/ip/hotspot/user', $body);
         return [
