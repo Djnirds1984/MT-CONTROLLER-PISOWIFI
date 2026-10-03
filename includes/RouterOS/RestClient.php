@@ -43,8 +43,8 @@ class RestClient implements RouterClient
         $this->password  = (string) ($router['password'] ?? '');
         $this->tlsVerify = !empty($router['tls_verify']);
 
-        // RouterOS REST API always requires HTTPS (HTTP Basic auth over plaintext is rejected).
-        $this->base = 'https://' . $this->host . ':' . $this->port . '/rest';
+        $scheme     = ($this->port === 80) ? 'http' : 'https';
+        $this->base = $scheme . '://' . $this->host . ':' . $this->port . '/rest';
     }
 
     // ---------------------------------------------------------------------
@@ -230,9 +230,9 @@ class RestClient implements RouterClient
         return $this->request('GET', $path, null, $query);
     }
 
-    private function put(string $path, array $body): array
+    private function put(string $path, array $body, int $timeout = 10): array
     {
-        return $this->request('PUT', $path, $body);
+        return $this->request('PUT', $path, $body, null, $timeout);
     }
 
     private function patch(string $path, array $body): array
@@ -267,7 +267,7 @@ class RestClient implements RouterClient
      * @return array Decoded response (empty array when the body is empty).
      * @throws RuntimeException On transport failure or HTTP >= 400.
      */
-    private function request(string $method, string $path, ?array $body = null, ?string $query = null): array
+    private function request(string $method, string $path, ?array $body = null, ?string $query = null, int $timeout = 10): array
     {
         $url = $this->base . '/' . ltrim($path, '/');
         if ($query !== null && $query !== '') {
@@ -285,7 +285,7 @@ class RestClient implements RouterClient
         curl_setopt($ch, CURLOPT_USERPWD, $this->username . ':' . $this->password);
         curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->tlsVerify);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->tlsVerify ? 2 : 0);
@@ -460,11 +460,12 @@ class RestClient implements RouterClient
     public function uploadHotspotStub(string $path, string $content): bool
     {
         // RouterOS REST /file expects base64-encoded contents.
+        // File uploads need a longer timeout — routers are slow at writing flash.
         $body = [
             'name'     => $path,
             'contents' => base64_encode($content),
         ];
-        $this->put('/file', $body);
+        $this->put('/file', $body, 30);
         return true;
     }
 
