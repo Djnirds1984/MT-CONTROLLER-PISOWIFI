@@ -43,8 +43,8 @@ class RestClient implements RouterClient
         $this->password  = (string) ($router['password'] ?? '');
         $this->tlsVerify = !empty($router['tls_verify']);
 
-        $scheme     = ($this->port === 80) ? 'http' : 'https';
-        $this->base = $scheme . '://' . $this->host . ':' . $this->port . '/rest';
+        // RouterOS REST API always requires HTTPS (HTTP Basic auth over plaintext is rejected).
+        $this->base = 'https://' . $this->host . ':' . $this->port . '/rest';
     }
 
     // ---------------------------------------------------------------------
@@ -471,14 +471,20 @@ class RestClient implements RouterClient
     /** @inheritDoc */
     public function listFiles(string $dir): array
     {
-        $rows = $this->get('/file', 'name~' . $dir);
+        // RouterOS REST /file does not support regex query filters reliably;
+        // fetch all files and filter client-side.
+        $rows = $this->get('/file');
         $out  = [];
+        $prefix = $dir . '/';
         foreach (self::asList($rows) as $r) {
-            $out[] = [
-                'name' => (string) ($r['name'] ?? ''),
-                'type' => (string) ($r['type'] ?? ''),
-                'size' => (int) ($r['size'] ?? 0),
-            ];
+            $name = (string) ($r['name'] ?? '');
+            if ($name !== '' && (strpos($name, $prefix) === 0 || $name === $dir)) {
+                $out[] = [
+                    'name' => $name,
+                    'type' => (string) ($r['type'] ?? ''),
+                    'size' => (int) ($r['size'] ?? 0),
+                ];
+            }
         }
         return $out;
     }
