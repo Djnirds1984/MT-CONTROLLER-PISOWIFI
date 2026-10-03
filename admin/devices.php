@@ -194,24 +194,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         $client = aircoins_router_client($router);
                         // MAC without colons as username (matches MikroTik convention).
                         $macUser = str_replace(':', '', $mac);
-                        // Check if user already exists on router.
-                        $existingUsers = $client->hotspotUsers();
-                        $existingId = null;
-                        foreach ($existingUsers as $eu) {
-                            if ((string) ($eu['name'] ?? '') === $macUser) {
-                                $existingId = (string) ($eu['.id'] ?? '');
-                                break;
+                        // Try to create the user; if it already exists, delete+recreate.
+                        try {
+                            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
+                        } catch (Throwable $dup) {
+                            // User likely exists — find and delete it, then recreate.
+                            $users = $client->hotspotUsers();
+                            foreach ($users as $eu) {
+                                if ((string) ($eu['name'] ?? '') === $macUser) {
+                                    $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
+                                    break;
+                                }
                             }
+                            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
                         }
-                        if ($existingId !== null) {
-                            // Delete old user, recreate with new limit-uptime.
-                            $client->deleteHotspotUser($existingId);
-                        }
-                        $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
                         $pushMsg = ' Session time pushed to router (' . $sessTime . ').';
                     } catch (Throwable $re) {
                         $pushMsg = ' (Router push failed: ' . $re->getMessage() . ')';
                     }
+                } else {
+                    $pushMsg = ' (Router #' . $routerId . ' not found)';
                 }
             }
 
