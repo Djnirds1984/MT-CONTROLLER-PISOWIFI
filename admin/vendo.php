@@ -6,6 +6,12 @@
  * Auto-discovers pending vendo devices from DHCP leases, accepts them (making
  * their IP static, adding bypass/walled-garden rules), and tracks them in the
  * vendo_devices database table.
+ *
+ * Accepted devices are shown as cards with editable per-device settings:
+ *   - Device name (shown in the portal dropdown)
+ *   - Coin pin (GPIO where the coin acceptor is connected)
+ *   - Debounce (ms) — pulse debounce guard
+ *   - Rate per pulse (₱) — pricing per coin pulse
  */
 
 declare(strict_types=1);
@@ -29,9 +35,42 @@ $action = (string) ($_POST['action'] ?? '');
 if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
 
-    $vendoId = (int) ($_POST['vendo_id'] ?? 0);
+    $vendoId  = (int) ($_POST['vendo_id'] ?? 0);
     $routerId = (int) ($_POST['router_id'] ?? 0);
 
+    // ---- save_settings: update card fields --------------------------------
+    if ($action === 'save_settings') {
+        $deviceName   = trim((string) ($_POST['device_name'] ?? ''));
+        $coinPin      = (int) ($_POST['coin_pin'] ?? 4);
+        $debounceMs   = (int) ($_POST['debounce_ms'] ?? 150);
+        $ratePerPulse = (float) ($_POST['rate_per_pulse'] ?? 1.00);
+
+        // Validate ranges.
+        if ($coinPin < 0 || $coinPin > 16) $coinPin = 4;
+        if ($debounceMs < 10 || $debounceMs > 5000) $debounceMs = 150;
+        if ($ratePerPulse < 0.01) $ratePerPulse = 1.00;
+
+        try {
+            $upd = $pdo->prepare(
+                'UPDATE vendo_devices SET device_name = :dn, coin_pin = :cp, '
+                . 'debounce_ms = :db, rate_per_pulse = :rp WHERE id = :id'
+            );
+            $upd->execute([
+                ':dn' => $deviceName,
+                ':cp' => $coinPin,
+                ':db' => $debounceMs,
+                ':rp' => $ratePerPulse,
+                ':id' => $vendoId,
+            ]);
+            aircoins_flash('success', 'Settings saved for vendo #' . $vendoId . '.');
+        } catch (Throwable $e) {
+            aircoins_flash('error', 'Save failed: ' . $e->getMessage());
+        }
+        header('Location: vendo.php');
+        exit;
+    }
+
+    // ---- accept / remove: require router ----------------------------------
     if ($routerId <= 0) {
         aircoins_flash('error', 'No router selected. Select a router from the top bar first.');
         header('Location: vendo.php');
@@ -51,7 +90,6 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'accept') {
-        // Fetch vendo record.
         $stmt = $pdo->prepare('SELECT * FROM vendo_devices WHERE id = :id');
         $stmt->execute([':id' => $vendoId]);
         $vendo = $stmt->fetch();
@@ -66,17 +104,14 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $ip  = (string) $vendo['ip_address'];
 
         try {
-            // 1. Make DHCP lease static.
             $client->makeDhcpLeaseStatic($mac, 'vendo:' . $mac);
+            $client->addIpBinding($ip, 'vendo-bypass:' . $mac);
+            $client->addWalledGarden($ip, 'vendo-wg:' . $mac);
 
-            // 2. Add IP binding bypass.
-            $binding = $client->addIpBinding($ip, 'vendo-bypass:' . $mac);
-
-            // 3. Add walled garden entry.
-            $wg = $client->addWalledGarden($ip, 'vendo-wg:' . $mac);
-
-            // 4. Update DB record.
-            $upd = $pdo->prepare('UPDATE vendo_devices SET status = :status, assigned_ip = :aip, accepted_at = :ts, last_seen = :ts WHERE id = :id');
+            $upd = $pdo->prepare(
+                'UPDATE vendo_devices SET status = :status, assigned_ip = :aip, '
+                . 'accepted_at = :ts, last_seen = :ts WHERE id = :id'
+            );
             $upd->execute([
                 ':status' => 'accepted',
                 ':aip'    => $ip,
@@ -96,7 +131,6 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'remove') {
-        // Fetch vendo record.
         $stmt = $pdo->prepare('SELECT * FROM vendo_devices WHERE id = :id');
         $stmt->execute([':id' => $vendoId]);
         $vendo = $stmt->fetch();
@@ -111,7 +145,6 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $ip  = (string) $vendo['assigned_ip'];
 
         try {
-            // Remove walled garden entries matching this vendo.
             $wgList = $client->walledGarden();
             foreach ($wgList as $wg) {
                 if (strpos((string) ($wg['comment'] ?? ''), 'vendo-wg:' . $mac) !== false) {
@@ -119,7 +152,6 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // Remove IP binding entries matching this vendo.
             $bindList = $client->ipBindings();
             foreach ($bindList as $b) {
                 if (strpos((string) ($b['comment'] ?? ''), 'vendo-bypass:' . $mac) !== false) {
@@ -127,9 +159,11 @@ if ($action !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // Update DB record.
-            $upd = $pdo->prepare('UPDATE vendo_devices SET status = :status, assigned_ip = NULL, accepted_at = NULL WHERE id = :id');
-            $upd->execute([':status' => 'pending', ':id' => $vendoId]);
+            $upd = $pdo->prepare(
+                "UPDATE vendo_devices SET status = 'pending', assigned_ip = NULL, "
+                . "accepted_at = NULL WHERE id = :id"
+            );
+            $upd->execute([':id' => $vendoId]);
 
             aircoins_audit($pdo, $_SESSION['admin_id'] ?? null, 'vendo_remove',
                 'router #' . $routerId . ' vendo ' . $mac);
@@ -157,13 +191,8 @@ if ($routerId > 0) {
         }
         $client = aircoins_router_client($router);
 
-        // Fetch DHCP leases to discover ESP8266 NodeMCU devices.
         $leases = $client->dhcpLeases();
 
-        // ESP8266 MAC prefixes (OUI): 18:FE:34, 24:0A:C4, 2C:3A:E8,
-        // 5C:CF:7F, 60:01:94, 68:C6:3A, 84:0D:8E, 84:F3:EB,
-        // A0:20:A6, B4:E6:2D, C4:4F:33, CC:50:E3, D8:A0:1D,
-        // DC:4F:22, EC:FA:BC, F0:FE:6B
         $espOuis = [
             '18:FE:34', '24:0A:C4', '2C:3A:E8', '5C:CF:7F',
             '60:01:94', '68:C6:3A', '84:0D:8E', '84:F3:EB',
@@ -171,7 +200,6 @@ if ($routerId > 0) {
             'D8:A0:1D', 'DC:4F:22', 'EC:FA:BC', 'F0:FE:6B',
         ];
 
-        // Load existing vendo devices from DB.
         $existingStmt = $pdo->query('SELECT mac_address, status, assigned_ip FROM vendo_devices');
         $existing = [];
         while ($row = $existingStmt->fetch()) {
@@ -183,92 +211,60 @@ if ($routerId > 0) {
             $ip       = (string) ($lease['address'] ?? '');
             $hostname = (string) ($lease['host-name'] ?? '');
 
-            // Match: ESP8266 OUI prefix OR hostname starting with "vendo"
             $isEsp = false;
             foreach ($espOuis as $oui) {
-                if (strpos($macRaw, $oui) === 0) {
-                    $isEsp = true;
-                    break;
-                }
+                if (strpos($macRaw, $oui) === 0) { $isEsp = true; break; }
             }
             if (!$isEsp && stripos($hostname, 'vendo') === 0) {
                 $isEsp = true;
             }
+            if (!$isEsp) continue;
 
-            if (!$isEsp) {
-                continue;
-            }
-
-            // Skip if already in DB as accepted.
             $ex = $existing[$macRaw] ?? null;
             if ($ex && (string) ($ex['status'] ?? '') === 'accepted') {
-                $accepted[] = [
-                    'mac_address' => $macRaw,
-                    'ip_address'  => $ip,
-                    'hostname'    => $hostname,
-                    'status'      => 'accepted',
-                    'assigned_ip' => (string) ($ex['assigned_ip'] ?? $ip),
-                ];
-                continue;
+                continue; // loaded separately below with full DB row
             }
 
-            // Upsert into vendo_devices as pending.
+            // Upsert as pending.
             try {
-                $ins = $pdo->prepare('INSERT INTO vendo_devices (mac_address, ip_address, hostname, router_id, status, created_at, last_seen)
-                    VALUES (:mac, :ip, :hn, :rid, \'pending\', :now, :now)
-                    ON CONFLICT(mac_address) DO UPDATE SET ip_address = :ip2, last_seen = :now2');
+                $ins = $pdo->prepare(
+                    'INSERT INTO vendo_devices (mac_address, ip_address, hostname, router_id, status, created_at, last_seen)
+                     VALUES (:mac, :ip, :hn, :rid, \'pending\', :now, :now)
+                     ON CONFLICT(mac_address) DO UPDATE SET ip_address = :ip2, last_seen = :now2'
+                );
                 $ins->execute([
-                    ':mac'  => $macRaw,
-                    ':ip'   => $ip,
-                    ':hn'   => $hostname,
-                    ':rid'  => $routerId,
-                    ':now'  => time(),
-                    ':ip2'  => $ip,
-                    ':now2' => time(),
+                    ':mac' => $macRaw, ':ip' => $ip, ':hn' => $hostname,
+                    ':rid' => $routerId, ':now' => time(), ':ip2' => $ip, ':now2' => time(),
                 ]);
-            } catch (Throwable $e) {
-                // Non-fatal: device still shows in discovery.
-            }
+            } catch (Throwable $e) { /* non-fatal */ }
 
             $pending[] = [
                 'mac_address' => $macRaw,
                 'ip_address'  => $ip,
                 'hostname'    => $hostname,
-                'status'      => 'pending',
             ];
-        }
-
-        // Also load accepted vendos from DB that may not be in current leases.
-        $accStmt = $pdo->prepare('SELECT * FROM vendo_devices WHERE router_id = :rid AND status = \'accepted\' ORDER BY accepted_at DESC');
-        $accStmt->execute([':rid' => $routerId]);
-        while ($row = $accStmt->fetch()) {
-            $macRaw = strtoupper((string) $row['mac_address']);
-            // Skip if already added from leases.
-            $found = false;
-            foreach ($accepted as $a) {
-                if ($a['mac_address'] === $macRaw) { $found = true; break; }
-            }
-            if (!$found) {
-                $accepted[] = [
-                    'mac_address' => $macRaw,
-                    'ip_address'  => (string) ($row['ip_address'] ?? ''),
-                    'hostname'    => (string) ($row['hostname'] ?? ''),
-                    'status'      => 'accepted',
-                    'assigned_ip' => (string) ($row['assigned_ip'] ?? ''),
-                    'db_id'       => (int) $row['id'],
-                ];
-            }
         }
     } catch (Throwable $e) {
         aircoins_flash('error', 'Router query failed: ' . $e->getMessage());
     }
 }
 
+// Load ALL accepted vendos from DB (with full settings).
+try {
+    $accStmt = $pdo->query(
+        "SELECT * FROM vendo_devices WHERE status = 'accepted' ORDER BY device_name ASC, id ASC"
+    );
+    while ($row = $accStmt->fetch()) {
+        $accepted[] = $row;
+    }
+} catch (Throwable $e) { /* empty */ }
+
 // ---- Render ----------------------------------------------------------------
 
 aircoins_header('Vendo Setup', 'vendo');
 ?>
 
+<!-- Pending Devices -->
 <div class="card">
   <div class="card__head">
     <h2 class="card__title">Pending Vendo Devices</h2>
@@ -292,7 +288,6 @@ aircoins_header('Vendo Setup', 'vendo');
         <tbody>
           <?php foreach ($pending as $p): ?>
             <?php
-            // Find DB id for this pending device.
             $pStmt = $pdo->prepare('SELECT id FROM vendo_devices WHERE mac_address = :mac');
             $pStmt->execute([':mac' => $p['mac_address']]);
             $pRow = $pStmt->fetch();
@@ -303,7 +298,7 @@ aircoins_header('Vendo Setup', 'vendo');
               <td><?php echo e($p['ip_address']); ?></td>
               <td><?php echo e($p['hostname'] ?: '—'); ?></td>
               <td>
-                <form method="post" action="vendo.php" style="display:inline" data-confirm="Accept this vendo device? This will assign a static IP, add a bypass binding, and create a walled-garden rule.">
+                <form method="post" action="vendo.php" style="display:inline" data-confirm="Accept this vendo device?">
                   <?php echo csrf_field(); ?>
                   <input type="hidden" name="action" value="accept">
                   <input type="hidden" name="vendo_id" value="<?php echo $pId; ?>">
@@ -319,50 +314,92 @@ aircoins_header('Vendo Setup', 'vendo');
   </div>
 </div>
 
+<!-- Accepted Devices — Card Layout -->
 <div class="card">
   <div class="card__head">
     <h2 class="card__title">Accepted Vendo Devices</h2>
-    <span class="card__sub">Static IP assigned, bypassed from hotspot, walled-garden configured</span>
+    <span class="card__sub">Each card represents a coin-slot node — configure pin, debounce, and rate per pulse</span>
   </div>
   <div class="card__body">
     <?php if ($accepted === []): ?>
-      <p class="muted">No accepted vendo devices yet.</p>
+      <p class="muted">No accepted vendo devices yet. Accept a pending device above to get started.</p>
     <?php else: ?>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>MAC Address</th>
-            <th>Assigned IP</th>
-            <th>Hostname</th>
-            <th style="width:120px">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($accepted as $a): ?>
-            <?php
-            // Find DB id.
-            $aStmt = $pdo->prepare('SELECT id FROM vendo_devices WHERE mac_address = :mac');
-            $aStmt->execute([':mac' => $a['mac_address']]);
-            $aRow = $aStmt->fetch();
-            $aId = $aRow ? (int) $aRow['id'] : ($a['db_id'] ?? 0);
-            ?>
-            <tr>
-              <td><code><?php echo e($a['mac_address']); ?></code></td>
-              <td><?php echo e($a['assigned_ip'] ?: $a['ip_address']); ?></td>
-              <td><?php echo e($a['hostname'] ?: '—'); ?></td>
-              <td>
-                <form method="post" action="vendo.php" style="display:inline" data-confirm="Remove this vendo? This will delete the static lease, binding, and walled-garden rules.">
-                  <?php echo csrf_field(); ?>
-                  <input type="hidden" name="action" value="remove">
-                  <input type="hidden" name="vendo_id" value="<?php echo $aId; ?>">
-                  <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
-                  <button class="btn btn--danger btn--sm" type="submit">Remove</button>
-                </form>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+        <?php foreach ($accepted as $a): ?>
+          <?php
+            $aId   = (int) $a['id'];
+            $aName = (string) ($a['device_name'] ?? '');
+            if ($aName === '') {
+                $aName = 'Vendo ' . strtoupper(substr((string) $a['mac_address'], -5));
+            }
+            $aIp   = (string) ($a['assigned_ip'] ?: $a['ip_address']);
+            $aMac  = (string) $a['mac_address'];
+            $aPin  = (int) ($a['coin_pin'] ?? 4);
+            $aDb   = (int) ($a['debounce_ms'] ?? 150);
+            $aRate = (float) ($a['rate_per_pulse'] ?? 1.00);
+          ?>
+          <div style="border:2px solid #e0e0e0; border-radius:12px; padding:16px; background:#fafafa;">
+            <!-- Header: name + IP -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div>
+                <strong style="font-size:16px; color:#00BCD4;"><?php echo e($aName); ?></strong><br>
+                <code style="font-size:11px; color:#888;"><?php echo e($aMac); ?></code>
+              </div>
+              <div style="text-align:right;">
+                <span style="display:inline-block; padding:3px 8px; background:#4caf50; color:#fff; border-radius:12px; font-size:11px; font-weight:700;">ONLINE</span><br>
+                <span style="font-size:12px; color:#555;"><?php echo e($aIp); ?></span>
+              </div>
+            </div>
+
+            <!-- Settings form -->
+            <form method="post" action="vendo.php">
+              <?php echo csrf_field(); ?>
+              <input type="hidden" name="action" value="save_settings">
+              <input type="hidden" name="vendo_id" value="<?php echo $aId; ?>">
+
+              <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin-bottom:3px;">Device Name</label>
+              <input type="text" name="device_name" value="<?php echo e($aName); ?>"
+                     style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:8px; box-sizing:border-box;"
+                     placeholder="e.g. Vendo 1 - Lobby">
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin-bottom:3px;">Coin Pin (GPIO)</label>
+                  <select name="coin_pin" style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                    <?php foreach ([0=>'D0 (Flash)', 2=>'D2 (Coin)', 4=>'D4 (LED)', 5=>'D1', 12=>'D6', 13=>'D7', 14=>'D5', 15=>'D8', 16=>'D3 (Setup)'] as $gpio => $lbl): ?>
+                      <option value="<?php echo $gpio; ?>" <?php echo $aPin === $gpio ? 'selected' : ''; ?>>
+                        <?php echo e($lbl); ?> — GPIO<?php echo $gpio; ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin-bottom:3px;">Debounce (ms)</label>
+                  <input type="number" name="debounce_ms" value="<?php echo $aDb; ?>" min="10" max="5000" step="10"
+                         style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                </div>
+              </div>
+
+              <label style="display:block; font-size:11px; font-weight:700; color:#666; text-transform:uppercase; margin:8px 0 3px;">Rate per Pulse (₱)</label>
+              <input type="number" name="rate_per_pulse" value="<?php echo number_format($aRate, 2, '.', ''); ?>" min="0.01" step="0.25"
+                     style="width:100%; padding:7px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:12px; box-sizing:border-box;">
+
+              <div style="display:flex; gap:8px;">
+                <button type="submit" class="btn btn--primary btn--sm" style="flex:1;">Save Settings</button>
+              </div>
+            </form>
+
+            <!-- Remove button -->
+            <form method="post" action="vendo.php" style="margin-top:10px;" data-confirm="Remove this vendo? This will delete the static lease, binding, and walled-garden rules.">
+              <?php echo csrf_field(); ?>
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="vendo_id" value="<?php echo $aId; ?>">
+              <input type="hidden" name="router_id" value="<?php echo $routerId; ?>">
+              <button type="submit" class="btn btn--danger btn--sm" style="width:100%;">Unassign / Remove</button>
+            </form>
+          </div>
+        <?php endforeach; ?>
+      </div>
     <?php endif; ?>
   </div>
 </div>

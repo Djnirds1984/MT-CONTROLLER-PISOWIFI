@@ -149,18 +149,44 @@ SQL);
 
     $pdo->exec(<<<'SQL'
 CREATE TABLE IF NOT EXISTS vendo_devices (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    mac_address  TEXT UNIQUE NOT NULL,
-    ip_address   TEXT,
-    hostname     TEXT,
-    router_id    INTEGER,
-    status       TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','disabled')),
-    assigned_ip  TEXT,
-    accepted_at  INTEGER,
-    last_seen    INTEGER,
-    created_at   INTEGER
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac_address    TEXT UNIQUE NOT NULL,
+    ip_address     TEXT,
+    hostname       TEXT,
+    router_id      INTEGER,
+    status         TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','disabled')),
+    assigned_ip    TEXT,
+    coin_pin       INTEGER DEFAULT 4,
+    debounce_ms    INTEGER DEFAULT 150,
+    rate_per_pulse REAL    DEFAULT 1.00,
+    device_name    TEXT,
+    accepted_at    INTEGER,
+    last_seen      INTEGER,
+    created_at     INTEGER
 )
 SQL);
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_vendo_devices_status ON vendo_devices (status)');
+
+    // Migration: add new columns to existing vendo_devices tables that were
+    // created before the card-settings refactor.
+    $cols = [];
+    try {
+        $colRows = $pdo->query("PRAGMA table_info(vendo_devices)")->fetchAll();
+        foreach ($colRows as $cr) {
+            $cols[] = (string) ($cr['name'] ?? '');
+        }
+    } catch (Throwable $e) { /* table may not exist yet */ }
+
+    $migrations = [
+        'coin_pin'       => "ALTER TABLE vendo_devices ADD COLUMN coin_pin INTEGER DEFAULT 4",
+        'debounce_ms'    => "ALTER TABLE vendo_devices ADD COLUMN debounce_ms INTEGER DEFAULT 150",
+        'rate_per_pulse' => "ALTER TABLE vendo_devices ADD COLUMN rate_per_pulse REAL DEFAULT 1.00",
+        'device_name'    => "ALTER TABLE vendo_devices ADD COLUMN device_name TEXT DEFAULT ''",
+    ];
+    foreach ($migrations as $colName => $ddl) {
+        if (!in_array($colName, $cols, true)) {
+            try { $pdo->exec($ddl); } catch (Throwable $e) { /* ignore */ }
+        }
+    }
 }

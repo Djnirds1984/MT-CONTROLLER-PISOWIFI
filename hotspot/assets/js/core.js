@@ -26,6 +26,68 @@ var chargerTimer = null;
 var rateType = "1";
 var voucherToConvert = "";
 
+/**
+ * Fetch accepted vendo devices from the SBC API and populate the dropdown.
+ * Also builds the multiVendoAddresses array for compatibility with existing code.
+ */
+function fetchVendoDevices(){
+	$.ajax({
+		type: "GET",
+		url: "/api/vendo.php?_=" + new Date().getTime(),
+		dataType: "json",
+		success: function(data){
+			var devices = data.devices || [];
+			multiVendoAddresses = [];
+			$("#vendoSelected").empty();
+
+			if(devices.length === 0){
+				$("#vendoSelectDiv").attr("style", "display: none");
+				return;
+			}
+
+			$("#vendoSelectDiv").attr("style", "display: block");
+			$("#vendoSelected").append($('<option>', {value: '', text: '-- Select Coin Slot --'}));
+
+			for(var i = 0; i < devices.length; i++){
+				var d = devices[i];
+				var label = d.name + ' (\u20B1' + parseFloat(d.rate_per_pulse).toFixed(2) + '/pulse)';
+				$("#vendoSelected").append($('<option>', {
+					value: d.ip,
+					text: label
+				}));
+				// Build compatibility array for existing code
+				multiVendoAddresses.push({
+					vendoName: d.name,
+					vendoIp: d.ip,
+					chargingEnable: false,
+					eloadEnable: false,
+					coinPin: d.coin_pin,
+					debounceMs: d.debounce_ms,
+					ratePerPulse: parseFloat(d.rate_per_pulse)
+				});
+			}
+
+			// Restore previously selected vendo
+			var saved = getStorageValue('selectedVendo');
+			if(saved){
+				$("#vendoSelected").val(saved);
+				vendorIpAddress = saved;
+			} else if(devices.length === 1){
+				// Auto-select if only one device
+				$("#vendoSelected").val(devices[0].ip);
+				vendorIpAddress = devices[0].ip;
+			}
+			$("#vendoSelected").trigger("change");
+		},
+		error: function(){
+			// API unreachable — hide selector, fall back to static config
+			if(multiVendoAddresses.length === 0){
+				$("#vendoSelectDiv").attr("style", "display: none");
+			}
+		}
+	});
+}
+
 
 $(document).ready(function(){
   $( "#saveVoucherButton" ).prop('disabled', true);	
@@ -80,7 +142,7 @@ $(document).ready(function(){
 			if(multiVendoAddresses[i].hotspotAddress == currentHotspot){
 				vendorIpAddress = multiVendoAddresses[i].vendoIp;
 			}
-		}  
+		}
 	  }else if(multiVendoOption == 2){
 		$("#vendoSelectDiv").attr("style", "display: none");
 		for(var i=0;i<multiVendoAddresses.length;i++){
@@ -88,19 +150,15 @@ $(document).ready(function(){
 			if(multiVendoAddresses[i].interfaceName == currentInterfaceName){
 				vendorIpAddress = multiVendoAddresses[i].vendoIp;
 			}
-		}  
+		}
 	  }else{
-		for(var i=0;i<multiVendoAddresses.length;i++){
-			$("#vendoSelected").append($('<option>', {
-			  value: multiVendoAddresses[i].vendoIp,
-			  text: multiVendoAddresses[i].vendoName
-			}));
-		}  
+		// Dynamic: fetch accepted vendo devices from the SBC API
+		fetchVendoDevices();
+		
 		var selectedVendo = getStorageValue('selectedVendo');
 		if(selectedVendo != null){
 			vendorIpAddress = selectedVendo;
 		}
-		$("#vendoSelected").val(vendorIpAddress);
 		$("#vendoSelected").change(function(){
 			vendorIpAddress = $("#vendoSelected").val();
 			setStorageValue('selectedVendo', vendorIpAddress);
@@ -262,6 +320,16 @@ function chargingBtnAction(){
 var timer = null;
 
 function insertBtnAction(){
+	// Validate vendo selection
+	if(isMultiVendo && (!vendorIpAddress || vendorIpAddress === '')){
+		$.toast({
+			title: 'No vendo selected',
+			content: 'Please select a coin slot from the dropdown first.',
+			type: 'warning',
+			delay: 4000
+		});
+		return false;
+	}
 	removeStorageValue("ignoreSaveCode");
 	setStorageValue('insertCoinRefreshed', "0");
 	$("#progressDiv").attr('style','width: 100%');
