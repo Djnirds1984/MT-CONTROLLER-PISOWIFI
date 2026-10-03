@@ -17,6 +17,12 @@
 - [DEPLOYMENT.md](file://DEPLOYMENT.md)
 </cite>
 
+## Update Summary
+**Changes Made**   
+- Updated Tools section to reflect the fixed database query that now includes all router authentication fields (pass_enc, username)
+- Enhanced documentation of router authentication requirements for hotspot stub management
+- Clarified the relationship between database queries and router client creation
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -109,7 +115,7 @@ Key implementation patterns include:
 - [includes/helpers.php:1-97](file://includes/helpers.php#L1-L97)
 
 ## Architecture Overview
-At a high level, the administrative tools sit between the operator’s browser and the MikroTik routers.
+At a high level, the administrative tools sit between the operator's browser and the MikroTik routers.
 
 ```mermaid
 sequenceDiagram
@@ -422,12 +428,22 @@ AuditProfileDelete --> RedirectHotspot
 ### Tools: Fix Router Hotspot Files
 The tools page addresses a common operational problem: when the full SBC portal is uploaded to the router instead of the thin redirect stubs, voucher login fails because the router serves the full portal in CHAP mode rather than redirecting to the SBC for HTTP-PAP login.
 
+**Updated** Fixed database query to include all router authentication fields (pass_enc, username) required for hotspot stub management operations.
+
 The tools page:
 
-- Lists enabled routers.
+- Lists enabled routers using a comprehensive SELECT * query that includes all authentication fields.
 - Diagnoses whether the four required stub files exist and are small enough to be thin redirectors.
 - Uploads embedded stub templates to the router after replacing the SBC IP placeholder.
 - Audits the fix action.
+
+The router selection query now ensures all necessary authentication fields are available for creating router clients:
+
+```sql
+SELECT * FROM routers WHERE disabled = 0 ORDER BY name COLLATE NOCASE ASC
+```
+
+This query retrieves all router fields including `pass_enc` and `username`, which are essential for the router factory to create authenticated connections for stub management operations.
 
 ```mermaid
 flowchart TD
@@ -505,6 +521,7 @@ Common operational issues and their likely causes:
 | Voucher login fails with invalid username or password | Full portal uploaded instead of thin stubs | Use Tools → Diagnose and Tools → Fix — Upload Stubs. |
 | Status page shows no active session | MAC mismatch, no enabled router, or router unreachable | Verify MAC parameter, enable router, and test connection. |
 | Monitor feed stops updating | Session expired or database unavailable | Refresh the page; check SQLite file permissions and database path. |
+| Tools page cannot connect to router | Missing authentication fields in database query | Ensure router query includes pass_enc and username fields. |
 
 Operational safeguards already present:
 
@@ -523,5 +540,7 @@ Operational safeguards already present:
 
 ## Conclusion
 The administrative tools provide a focused, secure, and practical interface for managing MikroTik hotspot deployments. They separate concerns cleanly: authentication and persistence are centralized, router communication is abstracted behind a factory, and each admin page handles one domain—dashboard, routers, hotspot operations, or operational tools. The system emphasizes security through CSRF, rate limiting, encrypted secrets, hashed passwords, and audit logging, while remaining lightweight enough for deployment on a single-board computer.
+
+The recent fix to the tools.php database query ensures that all router authentication fields (pass_enc, username) are properly included when performing hotspot stub management operations, resolving connectivity issues that could prevent successful stub uploads.
 
 [No sources needed since this section summarizes without analyzing specific files]

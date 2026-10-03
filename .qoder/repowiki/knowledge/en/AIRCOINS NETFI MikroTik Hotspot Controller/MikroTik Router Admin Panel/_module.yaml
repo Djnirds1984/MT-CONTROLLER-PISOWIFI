@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: admin_panel
-title: MikroTik Admin Panel
+title: MikroTik Router Admin Panel
 scope:
     - admin/
 source_files: []

@@ -3,11 +3,11 @@ schema_version: 1
 locale: en-US
 branch: main
 nodes_managed: true
-exported_at: "2026-10-03T07:16:13Z"
+exported_at: "2026-10-03T07:44:04Z"
 modules:
     "":
-        dir_name: AIRCOINS MikroTik Hotspot Controller
-        title: AIRCOINS MikroTik Hotspot Controller
+        dir_name: AIRCOINS NETFI MikroTik Hotspot Controller
+        title: AIRCOINS NETFI MikroTik Hotspot Controller
         scope:
             - .gitattributes
             - DEPLOYMENT.md
@@ -21,8 +21,8 @@ modules:
         depends_on: []
         related_to: []
     admin_panel:
-        dir_name: MikroTik Admin Panel
-        title: MikroTik Admin Panel
+        dir_name: MikroTik Router Admin Panel
+        title: MikroTik Router Admin Panel
         scope:
             - admin/
         source_files: []
@@ -64,8 +64,8 @@ modules:
             - path: deployment
             - path: hotspot_portal
     shared_includes:
-        dir_name: Shared PHP Runtime & RouterOS Client Abstraction
-        title: Shared PHP Runtime & RouterOS Client Abstraction
+        dir_name: AIRCOINS Shared Runtime & RouterOS Client Abstraction
+        title: AIRCOINS Shared Runtime & RouterOS Client Abstraction
         scope:
             - includes/
         source_files: []

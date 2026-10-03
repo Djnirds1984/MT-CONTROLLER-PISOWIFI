@@ -1,3 +1,5 @@
+Based on my analysis of the codebase, I can now update the documentation to reflect the enhanced `uploadHotspotStub` method with its sophisticated three-step file upload strategy. Here's the updated documentation:
+
 # Legacy API Client
 
 <cite>
@@ -10,10 +12,11 @@
 
 ## Update Summary
 **Changes Made**
-- Added documentation for new file operation methods (uploadHotspotStub, listFiles) implemented in LegacyApiClient
-- Updated binary protocol communication section to include arbitrary byte transmission capabilities
-- Enhanced file management capabilities documentation with examples of hotspot stub file operations
-- Updated troubleshooting guide to include file operation issues specific to legacy protocol
+- Enhanced documentation for the sophisticated three-step file upload strategy in `uploadHotspotStub` method
+- Updated hybrid Legacy/REST API approach explanation with detailed workflow
+- Added comprehensive error handling and file discovery/deletion capabilities documentation
+- Expanded troubleshooting guide with specific guidance for hybrid protocol operations
+- Enhanced file operation examples demonstrating the new upload strategy
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -22,14 +25,15 @@
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
 6. [File Operations and Binary Protocol](#file-operations-and-binary-protocol)
-7. [Dependency Analysis](#dependency-analysis)
-8. [Performance Considerations](#performance-considerations)
-9. [Troubleshooting Guide](#troubleshooting-guide)
-10. [Conclusion](#conclusion)
-11. [Appendices](#appendices)
+7. [Hybrid File Upload Strategy](#hybrid-file-upload-strategy)
+8. [Dependency Analysis](#dependency-analysis)
+9. [Performance Considerations](#performance-considerations)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Conclusion](#conclusion)
+12. [Appendices](#appendices)
 
 ## Introduction
-This document explains the Legacy API client implementation that communicates with MikroTik RouterOS using the legacy binary protocol over TCP port 8728 or TLS port 8729. It covers how `LegacyApiClient` implements the unified `RouterClientInterface`, the binary sentence protocol, connection and authentication flows, data serialization and deserialization, and how it compares to the REST client. It also provides operational examples, guidance on when to choose the legacy protocol, and troubleshooting for common issues such as binary format problems, authentication failures, version compatibility, and file operation challenges.
+This document explains the Legacy API client implementation that communicates with MikroTik RouterOS using the legacy binary protocol over TCP port 8728 or TLS port 8729. It covers how `LegacyApiClient` implements the unified `RouterClientInterface`, the binary sentence protocol, connection and authentication flows, data serialization and deserialization, and how it compares to the REST client. The implementation features a sophisticated hybrid file upload strategy that leverages both legacy and REST APIs for optimal performance and compatibility. It also provides operational examples, guidance on when to choose the legacy protocol, and troubleshooting for common issues such as binary format problems, authentication failures, version compatibility, and advanced file operation challenges.
 
 ## Project Structure
 The RouterOS integration is implemented as a small set of PHP classes under `includes/RouterOS`:
@@ -54,20 +58,20 @@ RF --> RC
 
 **Diagram sources**
 - [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
-- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [LegacyApiClient.php:22-724](file://includes/RouterOS/LegacyApiClient.php#L22-L724)
 - [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
 **Section sources**
 - [RouterClientInterface.php:1-151](file://includes/RouterOS/RouterClientInterface.php#L1-L151)
-- [LegacyApiClient.php:1-692](file://includes/RouterOS/LegacyApiClient.php#L1-L692)
+- [LegacyApiClient.php:1-724](file://includes/RouterOS/LegacyApiClient.php#L1-L724)
 - [RestClient.php:1-520](file://includes/RouterOS/RestClient.php#L1-L520)
 - [RouterFactory.php:1-56](file://includes/RouterOS/RouterFactory.php#L1-L56)
 
 ## Core Components
 - `RouterClientInterface`: Defines the shared operations for identity, resource info, hotspot users/profiles, active sessions, interfaces, file operations, and connection testing. Both REST and legacy clients implement this interface so higher layers can remain transport-agnostic.
-- `LegacyApiClient`: Implements the legacy binary protocol, including length-prefixed word encoding, sentence I/O, dual-mode login (plaintext and challenge-response), command execution, file operations, and normalization helpers.
-- `RestClient`: Implements the same interface over HTTPS JSON REST endpoints.
+- `LegacyApiClient`: Implements the legacy binary protocol, including length-prefixed word encoding, sentence I/O, dual-mode login (plaintext and challenge-response), command execution, sophisticated hybrid file operations, and normalization helpers.
+- `RestClient`: Implements the same interface over HTTPS JSON REST endpoints with intelligent file management strategies.
 - `RouterFactory`: Builds the appropriate client from router configuration, decrypting credentials in memory only.
 
 Key responsibilities:
@@ -75,12 +79,12 @@ Key responsibilities:
 - Connection establishment and optional TLS
 - Authentication handshake
 - Command execution and record collection
-- File operations with native binary transmission
+- Sophisticated hybrid file operations combining legacy and REST capabilities
 - Data normalization to match the interface contract
 
 **Section sources**
 - [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
-- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [LegacyApiClient.php:22-724](file://includes/RouterOS/LegacyApiClient.php#L22-L724)
 - [RestClient.php:24-520](file://includes/RouterOS/RestClient.php#L24-L520)
 - [RouterFactory.php:29-55](file://includes/RouterOS/RouterFactory.php#L29-L55)
 
@@ -119,7 +123,7 @@ Client-->>App : {ok,name,version,board-name}
 - Serialization: Encodes lengths per the RouterOS spec and writes length-prefixed words terminated by a zero-length word.
 - Deserialization: Reads length-prefixed words until the terminator, parses attributes into associative arrays.
 - Command execution: Sends commands with attributes and queries, collects `!re` records, and throws on `!trap` or `!fatal`.
-- Interface methods: Provide normalized results for identity, resources, hotspot users/profiles, active sessions, interfaces, file operations, and MAC lookup.
+- Interface methods: Provide normalized results for identity, resources, hotspot users/profiles, active sessions, interfaces, sophisticated hybrid file operations, and MAC lookup.
 
 ```mermaid
 classDiagram
@@ -183,7 +187,7 @@ RouterClient <|.. LegacyApiClient
 
 **Diagram sources**
 - [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
-- [LegacyApiClient.php:22-692](file://includes/RouterOS/LegacyApiClient.php#L22-L692)
+- [LegacyApiClient.php:22-724](file://includes/RouterOS/LegacyApiClient.php#L22-L724)
 
 #### Binary Length Encoding and Decoding
 The legacy protocol uses variable-length encodings for word sizes:
@@ -278,7 +282,7 @@ Key contracts include:
 - `hotspotUsers()` and `hotspotProfiles()` return normalized lists.
 - `activeSessions()` and `findActiveByMac()` provide session visibility.
 - `interfaces()` returns interface stats.
-- `uploadHotspotStub()` enables file upload with automatic encoding.
+- `uploadHotspotStub()` enables sophisticated hybrid file upload with automatic encoding.
 - `listFiles()` provides directory listing functionality.
 
 **Section sources**
@@ -325,21 +329,8 @@ H --> J["JSON Decoding + Base64 Decode"]
 ```
 
 **Diagram sources**
-- [LegacyApiClient.php:668-675](file://includes/RouterOS/LegacyApiClient.php#L668-L675)
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
 - [RestClient.php:460-475](file://includes/RouterOS/RestClient.php#L460-L475)
-
-### File Upload Implementation
-The `uploadHotspotStub()` method demonstrates the efficiency difference between protocols:
-
-**Legacy API Approach:**
-- Uses `/file` command with direct binary content transmission
-- No encoding overhead - raw bytes sent through binary protocol
-- Leverages existing length-prefix encoding for arbitrary data
-
-**REST API Approach:**
-- Requires base64 encoding of file content
-- Uses PUT/PATCH operations on `/rest/file` endpoint
-- Additional processing overhead for encoding/decoding
 
 ### File Listing Functionality
 Both clients implement `listFiles()` but with different approaches:
@@ -355,29 +346,88 @@ Both clients implement `listFiles()` but with different approaches:
 - More flexible but potentially less efficient
 
 **Section sources**
-- [LegacyApiClient.php:668-690](file://includes/RouterOS/LegacyApiClient.php#L668-L690)
-- [RestClient.php:460-518](file://includes/RouterOS/RestClient.php#L460-L518)
+- [LegacyApiClient.php:710-722](file://includes/RouterOS/LegacyApiClient.php#L710-L722)
+- [RestClient.php:500-518](file://includes/RouterOS/RestClient.php#L500-L518)
+
+## Hybrid File Upload Strategy
+
+### Sophisticated Three-Step Upload Process
+The enhanced `uploadHotspotStub` method implements a robust three-step strategy that combines the strengths of both legacy and REST APIs:
+
+```mermaid
+flowchart TD
+Start(["uploadHotspotStub called"]) --> Step1["Step 1: Find file via Legacy API<br/>/file/print with name filter"]
+Step1 --> CheckExists{"File exists?"}
+CheckExists --> |Yes| Step2["Step 2: Delete via Legacy API<br/>/file/remove with .id"]
+CheckExists --> |No| Step3["Step 3: Create via REST API<br/>PUT /file with contents"]
+Step2 --> Step3
+Step3 --> Success["Upload Complete"]
+style Step1 fill:#e1f5fe
+style Step2 fill:#fff3e0
+style Step3 fill:#e8f5e8
+```
+
+**Diagram sources**
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
+
+### Step-by-Step Implementation Details
+
+#### Step 1: File Discovery via Legacy API
+- Uses reliable legacy binary protocol to search for existing files
+- Leverages exact name matching for precise file identification
+- Handles errors gracefully if file listing fails
+
+#### Step 2: Intelligent File Deletion
+- If file exists, deletes it using legacy API's `/file/remove` command
+- Ensures clean slate for fresh file creation
+- Error handling prevents deletion failures from blocking the process
+
+#### Step 3: REST API File Creation
+- Creates fresh file using REST API's PUT method
+- Avoids "file already exists" errors by ensuring file doesn't exist
+- Leverages REST API's superior file content handling
+
+### Enhanced Error Handling
+The implementation includes comprehensive error handling:
+- **Graceful degradation**: If file discovery fails, continues to create new file
+- **Non-blocking deletions**: Deletion failures don't prevent subsequent operations
+- **Fallback mechanisms**: Multiple strategies ensure upload reliability
+
+### Performance Benefits
+- **Optimized file operations**: Combines legacy API's reliable file discovery with REST API's efficient content handling
+- **Reduced network overhead**: Minimizes redundant operations through intelligent caching of file IDs
+- **Protocol-specific optimizations**: Uses each protocol for its strongest capabilities
+
+**Updated** The upload strategy now provides superior reliability and performance by leveraging the strengths of both protocols while mitigating their individual limitations.
+
+**Section sources**
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
+- [RestClient.php:460-475](file://includes/RouterOS/RestClient.php#L460-L475)
 
 ## Dependency Analysis
 The legacy client depends on:
 - `RouterClientInterface` for method signatures and return contracts.
 - PHP stream sockets for TCP/TLS communication.
 - RouterOS binary protocol semantics for framing and tags.
+- Dynamic loading of RestClient for hybrid file operations.
 
 ```mermaid
 graph LR
 IF["RouterClientInterface"] --> LC["LegacyApiClient"]
 LC --> Sockets["PHP Streams (TCP/TLS)"]
 LC --> RouterOS["RouterOS Binary API"]
+LC --> RC["RestClient (dynamic)"]
 ```
 
 **Diagram sources**
 - [RouterClientInterface.php:31-151](file://includes/RouterOS/RouterClientInterface.php#L31-L151)
 - [LegacyApiClient.php:70-94](file://includes/RouterOS/LegacyApiClient.php#L70-L94)
+- [LegacyApiClient.php:698-706](file://includes/RouterOS/LegacyApiClient.php#L698-L706)
 
 **Section sources**
 - [LegacyApiClient.php:20-22](file://includes/RouterOS/LegacyApiClient.php#L20-L22)
 - [LegacyApiClient.php:70-94](file://includes/RouterOS/LegacyApiClient.php#L70-L94)
+- [LegacyApiClient.php:698-706](file://includes/RouterOS/LegacyApiClient.php#L698-L706)
 
 ## Performance Considerations
 - Binary protocol overhead: The legacy protocol sends compact length-prefixed words, which can be more efficient than JSON payloads for bulk operations.
@@ -385,7 +435,8 @@ LC --> RouterOS["RouterOS Binary API"]
 - Keep-alive: The client does not implement explicit keep-alive logic beyond keeping the socket open. Ensure long-lived connections are managed at the application layer.
 - TLS overhead: Using port 8729 adds TLS encryption costs; consider whether security requirements justify the overhead versus plain TCP 8728.
 - Batch operations: Group related commands where possible to reduce round trips.
-- File operations: Legacy API provides superior performance for file uploads due to native binary transmission without encoding overhead.
+- **Enhanced file operations**: The hybrid upload strategy optimizes performance by using legacy API for reliable file discovery and REST API for efficient content handling.
+- **Protocol switching overhead**: Dynamic loading of RestClient adds minimal overhead but provides significant functional benefits.
 
 ## Troubleshooting Guide
 
@@ -436,6 +487,23 @@ Checks:
 Relevant code paths:
 - [LegacyApiClient.php:70-94](file://includes/RouterOS/LegacyApiClient.php#L70-L94)
 
+### Hybrid File Operation Issues
+Symptoms:
+- File upload failures with hybrid strategy.
+- Inconsistent behavior between legacy and REST operations.
+- Permission denied errors during file operations.
+
+Checks:
+- **File discovery**: Verify legacy API can find files correctly
+- **Deletion permissions**: Ensure sufficient permissions for file removal
+- **REST API availability**: Confirm REST API is accessible on port 80
+- **Network connectivity**: Check connectivity to both legacy (8728/8729) and REST (80/443) ports
+- **Error propagation**: Review error handling in each step of the three-step process
+
+Relevant code paths:
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
+- [RestClient.php:460-475](file://includes/RouterOS/RestClient.php#L460-L475)
+
 ### File Operation Issues
 Symptoms:
 - File upload failures with binary content.
@@ -449,8 +517,8 @@ Checks:
 - Validate binary content integrity before upload.
 
 Relevant code paths:
-- [LegacyApiClient.php:668-690](file://includes/RouterOS/LegacyApiClient.php#L668-L690)
-- [RestClient.php:460-518](file://includes/RouterOS/RestClient.php#L460-L518)
+- [LegacyApiClient.php:710-722](file://includes/RouterOS/LegacyApiClient.php#L710-L722)
+- [RestClient.php:500-518](file://includes/RouterOS/RestClient.php#L500-L518)
 
 **Section sources**
 - [LegacyApiClient.php:70-94](file://includes/RouterOS/LegacyApiClient.php#L70-L94)
@@ -458,10 +526,11 @@ Relevant code paths:
 - [LegacyApiClient.php:186-241](file://includes/RouterOS/LegacyApiClient.php#L186-L241)
 - [LegacyApiClient.php:255-331](file://includes/RouterOS/LegacyApiClient.php#L255-L331)
 - [LegacyApiClient.php:630-665](file://includes/RouterOS/LegacyApiClient.php#L630-L665)
-- [LegacyApiClient.php:668-690](file://includes/RouterOS/LegacyApiClient.php#L668-L690)
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
+- [LegacyApiClient.php:710-722](file://includes/RouterOS/LegacyApiClient.php#L710-L722)
 
 ## Conclusion
-The Legacy API client provides a robust, low-level interface to RouterOS using the binary protocol. It offers fine-grained control over framing, authentication, and command execution, making it suitable for environments where performance and compatibility with older RouterOS versions matter. The unified `RouterClientInterface` ensures that application code remains portable across REST and legacy transports. Choose the legacy protocol when you need maximum efficiency, broad RouterOS version support, direct access to features not exposed via REST, or optimal file operation performance through native binary transmission. Use REST when you prefer HTTP/JSON semantics, simpler integration with web stacks, or when targeting modern RouterOS deployments.
+The Legacy API client provides a robust, low-level interface to RouterOS using the binary protocol with sophisticated hybrid file operations. It offers fine-grained control over framing, authentication, and command execution, making it suitable for environments where performance and compatibility with older RouterOS versions matter. The enhanced three-step file upload strategy demonstrates the power of combining legacy and REST APIs for optimal results. The unified `RouterClientInterface` ensures that application code remains portable across REST and legacy transports. Choose the legacy protocol when you need maximum efficiency, broad RouterOS version support, direct access to features not exposed via REST, or when leveraging the sophisticated hybrid file operations that combine the strengths of both protocols. Use REST when you prefer HTTP/JSON semantics, simpler integration with web stacks, or when targeting modern RouterOS deployments.
 
 ## Appendices
 
@@ -477,23 +546,23 @@ Examples of typical operations:
 - Kick session: `/ip/hotspot/active/remove` with `.id`
 - List interfaces: `/interface/print`
 - Find active session by MAC: `/ip/hotspot/active/print` with query `mac=<value>`
-- Upload hotspot stub: `/file` with `name` and `contents` attributes
+- **Enhanced file upload**: Sophisticated three-step strategy combining legacy discovery with REST creation
 - List files: `/file/print` with name filter query
 
 These operations map to methods like `hotspotUsers()`, `addHotspotUser()`, `deleteHotspotUser()`, `hotspotProfiles()`, `addHotspotProfile()`, `deleteHotspotProfile()`, `activeSessions()`, `kickSession()`, `interfaces()`, `findActiveByMac()`, `uploadHotspotStub()`, and `listFiles()`.
 
-**Updated** The attribute name has been corrected from `uptime-limit` to `limit-uptime` for hotspot user operations, and the endpoint path has been updated from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for hotspot profile operations to maintain RouterOS API compatibility. Additionally, file operation methods have been added to support hotspot stub file management.
+**Updated** The attribute name has been corrected from `uptime-limit` to `limit-uptime` for hotspot user operations, and the endpoint path has been updated from `/ip/hotspot/profile` to `/ip/hotspot/user/profile` for hotspot profile operations to maintain RouterOS API compatibility. Additionally, the sophisticated three-step hybrid file upload strategy has been implemented to provide optimal performance and reliability for hotspot stub file management.
 
 **Section sources**
-- [LegacyApiClient.php:466-690](file://includes/RouterOS/LegacyApiClient.php#L466-L690)
+- [LegacyApiClient.php:466-722](file://includes/RouterOS/LegacyApiClient.php#L466-L722)
 
 ### When to Choose Legacy Over REST
 Choose legacy when:
 - You need to support older RouterOS versions that do not expose all features via REST.
 - You require lower overhead and faster throughput for frequent small operations.
 - You need direct access to RouterOS commands not available through REST endpoints.
-- You require optimal file operation performance through native binary transmission.
-- You need to handle large binary files efficiently without encoding overhead.
+- **You require the sophisticated hybrid file upload strategy that combines legacy reliability with REST efficiency.**
+- You need to leverage the best of both protocols for complex file operations.
 
 Choose REST when:
 - You are targeting modern RouterOS deployments with stable REST APIs.
@@ -512,16 +581,18 @@ Choose REST when:
 
 2. **Endpoint Path Update**: Hotspot profile operations now use the correct endpoint path `/ip/hotspot/user/profile` instead of `/ip/hotspot/profile` to align with RouterOS API structure.
 
-3. **File Operation Enhancement**: New file operation methods provide consistent API across both connection types, with legacy protocol supporting native binary transmission for optimal performance.
+3. **Enhanced File Operations**: The sophisticated three-step hybrid file upload strategy provides optimal performance and reliability by combining legacy API's reliable file discovery with REST API's efficient content handling.
 
-These changes ensure compatibility with various RouterOS versions and prevent API call failures due to incorrect attribute names or endpoint paths.
+4. **Error Handling Improvements**: Comprehensive error handling ensures graceful degradation when individual steps fail, maintaining overall upload reliability.
+
+These changes ensure compatibility with various RouterOS versions and prevent API call failures due to incorrect attribute names, endpoint paths, or protocol limitations.
 
 **Section sources**
 - [LegacyApiClient.php:476](file://includes/RouterOS/LegacyApiClient.php#L476)
 - [LegacyApiClient.php:491](file://includes/RouterOS/LegacyApiClient.php#L491)
 - [LegacyApiClient.php:514](file://includes/RouterOS/LegacyApiClient.php#L514)
 - [LegacyApiClient.php:540](file://includes/RouterOS/LegacyApiClient.php#L540)
-- [LegacyApiClient.php:668-690](file://includes/RouterOS/LegacyApiClient.php#L668-L690)
+- [LegacyApiClient.php:668-707](file://includes/RouterOS/LegacyApiClient.php#L668-L707)
 - [RestClient.php:99](file://includes/RouterOS/RestClient.php#L99)
 - [RestClient.php:114](file://includes/RouterOS/RestClient.php#L114)
 - [RestClient.php:137](file://includes/RouterOS/RestClient.php#L137)
