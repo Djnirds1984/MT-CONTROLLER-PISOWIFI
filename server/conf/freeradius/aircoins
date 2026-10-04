@@ -5,16 +5,22 @@
 # or MAC as both username and password, loaded from radcheck); the router
 # is the only expected NAS.
 
+# virtual_server = aircoins is REQUIRED on each top-level listen block:
+# a top-level listen without it routes to the implicit virtual server
+# named "default", which install.sh deletes, leaving an empty server with
+# no authorize section -> "Empty authorize section" / "No Auth-Type found".
 listen {
 	type = auth
 	ipaddr = *
 	port = 1812
+	virtual_server = aircoins
 }
 
 listen {
 	type = acct
 	ipaddr = *
 	port = 1813
+	virtual_server = aircoins
 }
 
 server aircoins {
