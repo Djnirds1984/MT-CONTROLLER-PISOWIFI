@@ -147,9 +147,29 @@ step "2/12  Installing packages"
 info "apt-get update ..."
 apt-get update -y
 
-BASE_PKGS=(lighttpd lighttpd-mod-openssl openssl ufw ca-certificates freeradius freeradius-sqlite freeradius-utils)
+BASE_PKGS=(lighttpd lighttpd-mod-openssl openssl ufw ca-certificates freeradius freeradius-utils)
 info "Installing base packages: ${BASE_PKGS[*]}"
 apt-get install -y "${BASE_PKGS[@]}"
+
+# FreeRADIUS SQLite module — package name varies by distro
+# Debian/Ubuntu: freeradius-sqlite3; some Armbian builds include it in base freeradius
+FR_SQLITE_PKG=""
+if apt-cache show freeradius-sqlite3 >/dev/null 2>&1; then
+    FR_SQLITE_PKG="freeradius-sqlite3"
+elif apt-cache show freeradius-sqlite >/dev/null 2>&1; then
+    FR_SQLITE_PKG="freeradius-sqlite"
+fi
+if [ -n "$FR_SQLITE_PKG" ]; then
+    info "Installing FreeRADIUS SQLite module: $FR_SQLITE_PKG"
+    apt-get install -y "$FR_SQLITE_PKG"
+else
+    warn "No separate freeradius-sqlite package found — checking if module is bundled..."
+    if [ -f /etc/freeradius/3.0/mods-available/sql ] || [ -f /usr/lib/freeradius/rlm_sql_sqlite.so ]; then
+        ok "SQLite module appears to be bundled with freeradius."
+    else
+        warn "FreeRADIUS SQLite module not found. You may need to install it manually."
+    fi
+fi
 
 # Versioned PHP packages (php-curl for the REST client, php-mbstring for helpers).
 # NOTE: sodium is built into PHP core since 7.2 — no separate package needed.
@@ -455,7 +475,7 @@ CLIENTEOF
     fi
 else
     warn "FreeRADIUS config directory $FR_DIR not found — skipping RADIUS setup."
-    warn "Install manually: sudo apt-get install freeradius freeradius-sqlite"
+    warn "Install manually: sudo apt-get install freeradius freeradius-sqlite3"
 fi
 
 # ----------------------------------------------------------------------------

@@ -1,58 +1,49 @@
 #
 # ============================================================================
-#  AIRCOINS NETFI — MikroTik Hotspot → External Captive Portal (SBC) setup
+#  AIRCOINS NETFI — MikroTik hEX GR3 Hotspot → External Captive Portal (SBC)
 #  File: deploy/mikrotik/hotspot-external-portal.rsc
 # ============================================================================
 #
+#  TARGET HARDWARE
+#  ---------------
+#  MikroTik hEX GR3 (RB750Gr3) — 5x Gigabit Ethernet, no WiFi, RouterOS v7.
+#
+#  TOPOLOGY
+#  --------
+#    ether1  = WAN (uplink to ISP / main LAN 10.0.0.0/24)
+#    bridge-lan = ether2 + ether3 + ether4 + ether5 (hotspot LAN)
+#    SBC     = 10.0.0.252 on the WAN side (reachable via bridge-lan routing)
+#
 #  PURPOSE
 #  -------
-#  Configure a MikroTik router so that hotspot clients are redirected to an
-#  EXTERNAL captive-portal panel hosted on an SBC (Orange Pi / Raspberry Pi /
-#  any Ubuntu-Debian-Armbian box running lighttpd on port 80).
+#  Configure the hEX GR3 so that hotspot clients on the bridge-lan are
+#  redirected to an EXTERNAL captive-portal panel hosted on the SBC
+#  (FreeRADIUS + lighttpd on port 80).
 #
 #  The router keeps only thin "stub" pages in its own /hotspot directory
 #  (login.html, alogin.html, error.html, logout.html — see router-stubs/).
 #  Those stubs immediately meta-refresh the browser to the SBC panel, passing
 #  the client context (mac, ip, dst, login URL, logout URL, username, error).
-#  Authentication still happens ON the router via HTTP-PAP: the SBC login form
-#  POSTs the voucher back to the router's hotspot login URL.
 #
-#  Redirect flow
-#  -------------
-#    STA associates -> hotspot challenge -> router serves /hotspot/login.html
-#    (stub) -> browser meta-refreshes to  http://<SBC_IP>/login.html?...
+#  Authentication flow (RADIUS):
+#    Client -> hotspot challenge -> router serves /hotspot/login.html (stub)
+#    -> browser meta-refreshes to http://<SBC_IP>/login.html?...
 #    -> user submits voucher -> form POSTs to router login (HTTP-PAP)
-#    -> router serves /hotspot/alogin.html (stub) -> $(link-redirect) = SBC
-#    status page -> user is online.
+#    -> router sends RADIUS Access-Request to SBC FreeRADIUS
+#    -> FreeRADIUS checks SQLite -> Access-Accept with Session-Timeout
+#    -> router grants session
 #
 #  PREREQUISITES
 #  -------------
-#   * RouterOS v7 (the /system device-mode gate below is v7-only). The rest of
-#     the script is valid on v6 as well, except that device-mode line, which is
-#     left commented.
-#   * An SBC on the SAME L3 as the hotspot network, holding the static IP given
-#     by $sbcIP below, running lighttpd on port 80 serving the portal.
-#   * A hotspot interface ($hsInterface) that carries both the wireless/wired
-#     clients AND the SBC.
+#   * RouterOS v7.24+ (the /system device-mode gate below is v7-only).
+#   * The SBC at $sbcIP, running lighttpd :80 + FreeRADIUS with SQLite.
 #   * The router-stubs/*.html files uploaded to the router /hotspot directory,
-#     replacing the stock login.html, alogin.html, error.html, logout.html
-#     (see the final comment block).
-#   * WinBox/SSH access with full (admin) privileges — device-mode + services
-#     changes require it.
-#
-#  WHICH API TO ENABLE (for the SBC admin panel to talk to this router)
-#  -------------------------------------------------------------------
-#   * REST API  -> RouterOS v7 ONLY, service "www-ssl" on TCP 443, HTTPS with
-#                  Basic auth, JSON payloads (all values are strings). Enabled
-#                  in section 8 below. Requires a certificate.
-#   * Legacy API-> RouterOS v6 AND v7, service "api" on TCP 8728 (or "api-ssl"
-#                  8729). Binary sentence protocol. Usually already enabled by
-#                  default; the enable line is provided commented in section 8.
-#   Enable ONLY the one your admin panel is configured to use (or both).
+#     replacing the stock login.html, alogin.html, error.html, logout.html.
+#   * WinBox/SSH access with full (admin) privileges.
 #
 #  HOW TO RUN
 #  ----------
-#   1. Edit the :local variables in the block below to match your network.
+#   1. Edit the :local variables in SECTION 0 if your network differs.
 #   2. Paste into WinBox "New Terminal" (or SSH) and press Enter, or upload and
 #      run with:  /import file-name=hotspot-external-portal.rsc
 #   3. Upload the router-stubs/*.html files (final section).
@@ -60,25 +51,28 @@
 
 
 # ----------------------------------------------------------------------------
-# SECTION 0 — Site variables (EDIT THESE)
+# SECTION 0 — Site variables (EDIT THESE if your network differs)
 # ----------------------------------------------------------------------------
 # Everything site-specific lives here so the rest of the script is copy-paste
 # safe. Names in $... are referenced throughout.
 
-:local sbcIP        "192.168.88.10"          # SBC panel IP (lighttpd :80). Replace everywhere.
-:local hsInterface  "bridge-hotspot"         # Interface the hotspot + clients + SBC live on.
-:local hsNet        "192.168.88.0/24"        # Hotspot client network (with mask).
-:local hsPool       "hs-pool"                # Name of the DHCP address pool for hotspot clients.
+# --- Primary variables (change to match your deployment) ---------------------
+:local sbcIP        "10.0.0.252"           # SBC panel IP (lighttpd :80 + FreeRADIUS).
+:local wanInterface "ether1"               # Uplink/WAN interface (to ISP or main LAN).
+:local lanPorts     "ether2,ether3,ether4,ether5"  # Ports bridged for hotspot LAN.
+:local bridgeName   "bridge-lan"           # Name of the LAN bridge interface.
+:local hsNet        "192.168.88.0/24"      # Hotspot client network (with mask).
+:local hsPool       "hs-pool"              # Name of the DHCP address pool.
 :local dnsName      "hotspot.aircoins.local" # Portal hostname clients resolve to the SBC.
 
 # --- Supporting variables (defaults are fine for 192.168.88.0/24) ------------
-:local hsAddress    "192.168.88.1/24"        # Router gateway address on $hsInterface.
-:local gwIP         "192.168.88.1"           # Gateway IP without mask (DHCP + hotspot-address).
-:local hsPoolRange  "192.168.88.100-192.168.88.254"  # DHCP lease range (SBC IP must be OUTSIDE it).
-:local wanInterface "ether1"                 # Uplink/WAN interface for internet masquerade.
-:local hsProfile    "aircoins-external"      # Hotspot profile name.
-:local hsServer     "aircoins-hotspot"       # Hotspot server name.
-:local dhcpName     "aircoins-dhcp"          # DHCP server name.
+:local hsAddress    "192.168.88.1/24"      # Router gateway address on bridge-lan.
+:local gwIP         "192.168.88.1"         # Gateway IP without mask (DHCP + hotspot-address).
+:local hsPoolRange  "192.168.88.100-192.168.88.254" # DHCP lease range (SBC IP must be OUTSIDE it).
+:local hsProfile    "aircoins-external"    # Hotspot profile name.
+:local hsServer     "aircoins-hotspot"     # Hotspot server name.
+:local dhcpName     "aircoins-dhcp"        # DHCP server name.
+:local radiusSecret "aircoins_secret"      # Shared secret (must match SBC /etc/freeradius/3.0/clients.conf).
 
 
 # ----------------------------------------------------------------------------
@@ -87,26 +81,38 @@
 # On RouterOS v7 the "hotspot" feature is gated by device-mode. If it is not
 # enabled, /ip hotspot commands and the hotspot server will not work.
 #
-# >>> RouterOS v7 users: UNCOMMENT the line below and re-run it once. <<<
-# >>> RouterOS v6 users: leave it commented (device-mode does not exist on v6). <<<
-# Setting device-mode may require the change to be applied by an admin session;
-# on some units a reboot is recommended afterwards.
+# >>> UNCOMMENT the line below and re-run it once. <<<
+# Setting device-mode may require a reboot afterwards.
 #
 # /system device-mode set hotspot=yes
 
 
 # ----------------------------------------------------------------------------
-# SECTION 2 — Base addressing: gateway IP, DHCP pool, DHCP server + network
+# SECTION 2 — Create LAN bridge (hEX GR3 has no bridge by default)
 # ----------------------------------------------------------------------------
-# Router IP on the hotspot interface (client default gateway).
-/ip address add address=$hsAddress interface=$hsInterface network=$hsNet \
+# The hEX GR3 ships with 5 independent Ethernet ports. We bridge ether2-ether5
+# to form the hotspot LAN. ether1 stays as the standalone WAN uplink.
+#
+# Skip this section if a bridge already exists on your router.
+/interface bridge add name=$bridgeName comment="AIRCOINS hotspot LAN bridge"
+/interface bridge port add bridge=$bridgeName interface=ether2 comment="AIRCOINS LAN port 2"
+/interface bridge port add bridge=$bridgeName interface=ether3 comment="AIRCOINS LAN port 3"
+/interface bridge port add bridge=$bridgeName interface=ether4 comment="AIRCOINS LAN port 4"
+/interface bridge port add bridge=$bridgeName interface=ether5 comment="AIRCOINS LAN port 5"
+
+
+# ----------------------------------------------------------------------------
+# SECTION 3 — Base addressing: gateway IP, DHCP pool, DHCP server + network
+# ----------------------------------------------------------------------------
+# Router IP on the bridge-lan interface (client default gateway).
+/ip address add address=$hsAddress interface=$bridgeName network=$hsNet \
     comment="AIRCOINS hotspot gateway"
 
 # Address pool handed out to hotspot clients. Keep $sbcIP outside this range.
 /ip pool add name=$hsPool ranges=$hsPoolRange
 
-# DHCP server bound to the hotspot interface, leasing from the pool above.
-/ip dhcp-server add name=$dhcpName interface=$hsInterface address-pool=$hsPool \
+# DHCP server bound to the bridge-lan, leasing from the pool above.
+/ip dhcp-server add name=$dhcpName interface=$bridgeName address-pool=$hsPool \
     lease-time=1d bootp-support=none disabled=no comment="AIRCOINS hotspot DHCP"
 
 # DHCP network record: gateway + DNS point at the router (router will resolve
@@ -120,7 +126,7 @@
 
 
 # ----------------------------------------------------------------------------
-# SECTION 3 — Hotspot profile (HTTP-PAP + cookie + RADIUS)
+# SECTION 4 — Hotspot profile (HTTP-PAP + cookie + RADIUS)
 # ----------------------------------------------------------------------------
 # login-by=http-pap,cookie :
 #   * http-pap  -> the SBC login form POSTs the voucher in PLAINTEXT over HTTP.
@@ -141,44 +147,36 @@
 
 
 # ----------------------------------------------------------------------------
-# SECTION 4 — Hotspot server on the interface (pool + profile)
+# SECTION 5 — Hotspot server on the bridge (pool + profile)
 # ----------------------------------------------------------------------------
-/ip hotspot add name=$hsServer interface=$hsInterface address-pool=$hsPool \
+/ip hotspot add name=$hsServer interface=$bridgeName address-pool=$hsPool \
     profile=$hsProfile disabled=no comment="AIRCOINS external-portal hotspot"
 
 
 # ----------------------------------------------------------------------------
-# SECTION 5 — Walled garden: let UNAUTHENTICATED clients reach the SBC portal
+# SECTION 6 — Walled garden: let UNAUTHENTICATED clients reach the SBC portal
 # ----------------------------------------------------------------------------
 # /ip hotspot walled-garden ip uses action=accept (NOT "allow" — that keyword is
 # only valid on the non-ip "/ip hotspot walled-garden" host-name rules).
-# This lets a client that has NOT logged in yet open http://<SBC_IP>/ (port 80)
+# This lets a client that has NOT logged in yet reach the SBC on port 80
 # so the login page itself can load before authentication.
+# Since the SBC (10.0.0.252) is on a DIFFERENT subnet than the hotspot clients
+# (192.168.88.0/24), this rule is REQUIRED — the router must permit the traffic.
 /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=80 \
-    protocol=tcp comment="AIRCOINS SBC portal"
+    protocol=tcp comment="AIRCOINS SBC portal (HTTP)"
 
-# Allow RADIUS traffic (UDP 1812/1813) from router to SBC if needed.
-# Normally this is on the same subnet and doesn't need a walled-garden rule,
-# but if the SBC is on a different subnet, uncomment the following:
-# /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=1812 \
-#     protocol=udp comment="AIRCOINS RADIUS auth"
-# /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=1813 \
-#     protocol=udp comment="AIRCOINS RADIUS accounting"
-
-# Optional: also allow the SBC admin panel over HTTPS (443) from the walled
-# garden IF admins browse it from the hotspot side. Usually NOT needed because
-# admin traffic comes from the management network — uncomment only if required.
-# /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=443 \
-#     protocol=tcp comment="AIRCOINS SBC admin (HTTPS)"
+# Also allow the SBC admin panel over HTTPS (443) from the walled garden
+# so admins can reach https://<SBC_IP>/ from the hotspot side.
+/ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=443 \
+    protocol=tcp comment="AIRCOINS SBC admin (HTTPS)"
 
 
 # ----------------------------------------------------------------------------
-# SECTION 5b — RADIUS server configuration
+# SECTION 7 — RADIUS server configuration
 # ----------------------------------------------------------------------------
 # Point the router's RADIUS client at the SBC where FreeRADIUS runs.
 # The shared secret must match /etc/freeradius/3.0/clients.conf on the SBC.
 # Service=hotspot means this RADIUS server is used for hotspot authentication.
-:local radiusSecret "aircoins_secret"
 /radius add service=hotspot address=$sbcIP secret=$radiusSecret \
     timeout=3s authentication-port=1812 accounting-port=1813 \
     comment="AIRCOINS SBC FreeRADIUS"
@@ -188,17 +186,18 @@
 
 
 # ----------------------------------------------------------------------------
-# SECTION 6 — IP binding: exempt the SBC from hotspot interception entirely
+# SECTION 8 — IP binding: exempt the SBC from hotspot interception entirely
 # ----------------------------------------------------------------------------
 # type=bypassed means the router never redirects the SBC's own traffic through
 # the hotspot and never challenges it — the SBC is always reachable and can
-# always talk to the router API. This prevents redirect loops between the router
-# stub and the SBC portal.
+# always talk to the router API. This prevents redirect loops.
+# NOTE: The SBC is on the WAN side (10.0.0.252), not on bridge-lan, so this
+# rule prevents the hotspot from intercepting return traffic to the SBC.
 /ip hotspot ip-binding add address=$sbcIP type=bypassed comment="SBC exempt"
 
 
 # ----------------------------------------------------------------------------
-# SECTION 7 — Services for the SBC admin panel (REST and/or Legacy API)
+# SECTION 9 — Services for the SBC admin panel (REST API)
 # ----------------------------------------------------------------------------
 # --- REST API (RouterOS v7) -------------------------------------------------
 # www-ssl serves the REST API over HTTPS on TCP 443 (Basic auth, JSON).
@@ -206,31 +205,26 @@
 # self-signed cert, but it is cleaner to create/assign your own, e.g.:
 #   /certificate add name=aircoins-rest-cert common-name=$dnsName days-valid=3650 \
 #       key-size=2048 trusted=yes
-#   /certificate create-certificate ... (or import a CA-signed cert)
 #   /ip service set www-ssl certificate=aircoins-rest-cert
-# The SBC REST client should disable peer verification (self-signed) per the plan.
+# The SBC REST client should disable peer verification (self-signed).
 /ip service enable www-ssl
 
-# --- Legacy binary API (RouterOS v6 + v7) -----------------------------------
-# Service "api" on TCP 8728 (plaintext) / "api-ssl" on 8729 (TLS). This is
-# usually ALREADY enabled by default on RouterOS. Uncomment only if you disabled
-# it or want to be explicit. Enable this INSTEAD OF / IN ADDITION TO www-ssl
-# depending on which API type the admin panel uses for this router.
-# /ip service enable api
-# /ip service enable api-ssl
+# --- Also enable plain-HTTP www service (port 80) for the SBC REST client ----
+# The operator's panel uses REST over plain HTTP on port 80 (not HTTPS).
+/ip service enable www
 
 
 # ----------------------------------------------------------------------------
-# SECTION 8 — Static DNS: portal hostname -> SBC IP
+# SECTION 10 — Static DNS: portal hostname -> SBC IP
 # ----------------------------------------------------------------------------
 # So that clients asking for $dnsName are answered with the SBC address. This
 # lets you use a friendly portal URL (e.g. http://hotspot.aircoins.local) that
-# points at the SBC, matching the profile dns-name in section 3.
+# points at the SBC, matching the profile dns-name in section 4.
 /ip dns static add name=$dnsName address=$sbcIP comment="AIRCOINS portal hostname -> SBC"
 
 
 # ----------------------------------------------------------------------------
-# SECTION 9 — Internet NAT (masquerade out the WAN interface)
+# SECTION 11 — Internet NAT (masquerade out the WAN interface)
 # ----------------------------------------------------------------------------
 # Authenticated hotspot clients reach the internet through the WAN uplink.
 /ip firewall nat add chain=srcnat out-interface=$wanInterface action=masquerade \
@@ -238,7 +232,7 @@
 
 
 # ============================================================================
-# SECTION 10 — FINAL STEP: UPLOAD THE ROUTER STUB PAGES
+# SECTION 12 — FINAL STEP: UPLOAD THE ROUTER STUB PAGES
 # ============================================================================
 # The router still needs its own thin stub pages so the redirect chain starts
 # and ends on the router. Upload the files from router-stubs/ into the router's
@@ -250,7 +244,7 @@
 #     router-stubs/error.html   ->  /hotspot/error.html
 #     router-stubs/logout.html  ->  /hotspot/logout.html
 #
-# Before uploading, edit each stub and replace 192.168.88.10 with your real
+# Before uploading, edit each stub and replace 10.0.0.252 with your real
 # $sbcIP (the SBC panel IP). login.html MUST keep the marker comment
 # <!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE --> so RouterOS still treats it as the
 # hotspot login page.
