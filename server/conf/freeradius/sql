@@ -22,15 +22,10 @@ sql {
 	# source IP — NOT in the database.
 	read_clients = no
 
-	# Table names (radacct serves both open and stopped sessions).
-	acct_table1 = "radacct"
-	acct_table2 = "radacct"
-	postauth_table = "radpostauth"
-	authcheck_table = "radcheck"
-	authreply_table = "radreply"
-	groupcheck_table = "radgroupcheck"
-	groupreply_table = "radgroupreply"
-	usergroup_table = "radusergroup"
+	# Table names are hardcoded in queries below (FreeRADIUS 3.2.x
+	# does not reliably expand ${var} references from nested sub-sections).
+	#   radacct, radpostauth, radcheck, radreply,
+	#   radgroupcheck, radgroupreply, radusergroup
 
 	# A single-file database cannot fan out; keep the pool tight.
 	pool {
@@ -46,7 +41,7 @@ sql {
 	# Used by the session section (Simultaneous-Use checks).
 	simul_count_query = "\
 		SELECT COUNT(*) \
-		FROM ${acct_table1} \
+		FROM radacct \
 		WHERE username = '%{SQL-User-Name}' \
 		AND acctstoptime IS NULL"
 
@@ -55,31 +50,31 @@ sql {
 	authorize {
 		check_query = "\
 			SELECT id, username, attribute, value, op \
-			FROM ${authcheck_table} \
+			FROM radcheck \
 			WHERE username = '%{SQL-User-Name}' \
 			ORDER BY id"
 
 		reply_query = "\
 			SELECT id, username, attribute, value, op \
-			FROM ${authreply_table} \
+			FROM radreply \
 			WHERE username = '%{SQL-User-Name}' \
 			ORDER BY id"
 
 		group_check_query = "\
 			SELECT id, groupname, attribute, value, op \
-			FROM ${groupcheck_table} \
+			FROM radgroupcheck \
 			WHERE groupname = '%{SQL-Group}' \
 			ORDER BY id"
 
 		group_reply_query = "\
 			SELECT id, groupname, attribute, value, op \
-			FROM ${groupreply_table} \
+			FROM radgroupreply \
 			WHERE groupname = '%{SQL-Group}' \
 			ORDER BY id"
 
 		usergroup_query = "\
 			SELECT groupname \
-			FROM ${usergroup_table} \
+			FROM radusergroup \
 			WHERE username = '%{SQL-User-Name}' \
 			ORDER BY priority"
 	}
@@ -97,7 +92,7 @@ sql {
 		type {
 			accounting-on {
 				query = "\
-					UPDATE ${acct_table1} \
+					UPDATE radacct \
 					SET acctstoptime = '%S', \
 						acctterminatecause = 'NAS-Reboot' \
 					WHERE acctstoptime IS NULL \
@@ -106,7 +101,7 @@ sql {
 
 			accounting-off {
 				query = "\
-					UPDATE ${acct_table1} \
+					UPDATE radacct \
 					SET acctstoptime = '%S', \
 						acctterminatecause = 'NAS-Reboot' \
 					WHERE acctstoptime IS NULL \
@@ -115,7 +110,7 @@ sql {
 
 			start {
 				query = "\
-					INSERT INTO ${acct_table1} (\
+					INSERT INTO radacct (\
 						acctsessionid, acctuniqueid, username, \
 						realm, nasipaddress, nasportid, \
 						nasporttype, acctstarttime, acctupdatetime, \
@@ -140,7 +135,7 @@ sql {
 
 			interim-update {
 				query = "\
-					UPDATE ${acct_table1} \
+					UPDATE radacct \
 					SET acctupdatetime = '%S', \
 						acctsessiontime = '%{Acct-Session-Time}', \
 						acctinputoctets = \
@@ -156,7 +151,7 @@ sql {
 
 			stop {
 				query = "\
-					UPDATE ${acct_table1} \
+					UPDATE radacct \
 					SET acctstoptime = '%S', \
 						acctupdatetime = '%S', \
 						acctsessiontime = '%{Acct-Session-Time}', \
@@ -182,7 +177,7 @@ sql {
 
 	post-auth {
 		query = "\
-			INSERT INTO ${postauth_table} \
+			INSERT INTO radpostauth \
 				(username, pass, reply, authdate) \
 			VALUES (\
 				'%{SQL-User-Name}', '', \
