@@ -193,7 +193,11 @@ build_binary() {
 
 if [ -n "$PREBUILT" ]; then
 	[ -x "$PREBUILT" ] || die "prebuilt binary $PREBUILT not found/executable"
-	install -m 0755 "$PREBUILT" "$BIN"
+	# `install` refuses src == dst; passing the live binary as its own
+	# prebuilt is a legitimate way to skip the rebuild on slow boards.
+	if [ "$(readlink -f "$PREBUILT")" != "$(readlink -f "$BIN")" ]; then
+		install -m 0755 "$PREBUILT" "$BIN"
+	fi
 	log "installed prebuilt $BIN"
 else
 	build_binary
@@ -307,7 +311,10 @@ if ! freeradius -C >/dev/null 2>&1; then
 fi
 log "FreeRADIUS config check passed (freeradius $FRV)"
 
-systemctl enable --now freeradius >/dev/null 2>&1 || systemctl restart freeradius
+# restart, never just start: on re-runs the service is already active and
+# `enable --now` would leave the freshly written config unloaded.
+systemctl enable freeradius >/dev/null 2>&1
+systemctl restart freeradius
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
 	ufw allow 80/tcp  >/dev/null || true
 	ufw allow 1812:1813/udp >/dev/null || true
@@ -340,7 +347,8 @@ ProtectHome=yes
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now aircoind >/dev/null 2>&1 || systemctl restart aircoind
+systemctl enable aircoind >/dev/null 2>&1
+systemctl restart aircoind
 
 systemctl restart lighttpd
 

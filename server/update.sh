@@ -45,7 +45,10 @@ find "$PORTAL_ROOT" "$ADMIN_ROOT" -type f -exec chmod 0644 {} +
 
 if [ -n "$PREBUILT" ]; then
 	[ -x "$PREBUILT" ] || die "prebuilt binary $PREBUILT not found/executable"
-	install -m 0755 "$PREBUILT" "$BIN"
+	# `install` refuses src == dst (e.g. passing the live binary path)
+	if [ "$(readlink -f "$PREBUILT")" != "$(readlink -f "$BIN")" ]; then
+		install -m 0755 "$PREBUILT" "$BIN"
+	fi
 	log "replaced $BIN (prebuilt)"
 else
 	command -v go >/dev/null 2>&1 || [ -x /usr/local/go/bin/go ] || \
