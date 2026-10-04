@@ -187,9 +187,19 @@ func (s *Store) handleMTStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	checks := []mtCheck{}
 	if rc == nil {
+		// rc is nil for two distinct reasons: no active router row at all,
+		// or an active row set to api_mode "native" (this configurator is
+		// REST-only). Read the row so the operator gets a specific message
+		// instead of a generic reachability failure.
+		row, _ := s.routerActiveRow()
+		detail := "Add and activate a REST-mode router in the Routers page first."
+		if row != nil && row.APIMode == "native" {
+			detail = "The active router (" + row.Name + ") uses the Native API, but this " +
+				"configurator is REST-only. Switch it to REST mode or activate a REST-mode router in the Routers page."
+		}
 		checks = append(checks, mtCheck{
 			Key: "reach", Label: "Router reachable",
-			Detail: "Add and activate a REST-mode router in the Routers page first.",
+			Detail: detail,
 		})
 		out["checks"] = checks
 		respondJSON(w, http.StatusOK, out)
@@ -428,10 +438,22 @@ func (s *Store) handleMTApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// REST-only configurator: a native-mode active router yields nil here.
+	// REST-only configurator: a native-mode active router yields nil here,
+	// as does having no active router row at all. Render the reason in the
+	// Apply results panel (ok:false + a failed step) so it is not swallowed
+	// as a silent "nothing happened".
 	rc, _ := routerActive(s).(*RouterClient)
 	if rc == nil {
-		respondError(w, http.StatusBadRequest, "activate a REST-mode router in the Routers page first")
+		msg := "no active router — add and activate a router on the Routers page first"
+		if row, _ := s.routerActiveRow(); row != nil && row.APIMode == "native" {
+			msg = fmt.Sprintf("the MikroTik configurator requires a REST-mode router; the active router (%q) is set to Native API — switch it to REST or activate a REST router", row.Name)
+		}
+		respondJSON(w, http.StatusOK, map[string]any{
+			"ok": false,
+			"results": []map[string]any{
+				{"label": "Router client", "ok": false, "error": msg},
+			},
+		})
 		return
 	}
 
