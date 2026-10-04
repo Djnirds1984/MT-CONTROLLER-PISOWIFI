@@ -1,0 +1,192 @@
+# AIRCOINS NETFI — FreeRADIUS SQL module backed by SQLite.
+#
+# Replaces <raddb>/mods-available/sql entirely (the stock file defaults to
+# rlm_sql_null / mysql and would silently answer nothing). install.sh
+# enables it with a symlink in mods-enabled/ and substitutes @@RADIUS_DB@@.
+#
+# aircoind and FreeRADIUS share this one file: aircoind (MaxOpenConns(1) +
+# busy_timeout + WAL) writes users, FreeRADIUS reads them and writes
+# accounting. If logins fail, first check the daemon log for the DB path
+# it actually opened — that is the only trustworthy check.
+sql {
+	driver = "rlm_sql_sqlite"
+	dialect = "sqlite"
+
+	# THIS is the path the daemon opens (not radius_db — the sqlite
+	# driver only reads the sqlite subsection below).
+	sqlite {
+		filename = "@@RADIUS_DB@@"
+	}
+
+	# The NAS (router) is defined in clients.conf, keyed by its real
+	# source IP — NOT in the database.
+	read_clients = no
+
+	# Table names (radacct serves both open and stopped sessions).
+	acct_table1 = "radacct"
+	acct_table2 = "radacct"
+	postauth_table = "radpostauth"
+	authcheck_table = "radcheck"
+	authreply_table = "radreply"
+	groupcheck_table = "radgroupcheck"
+	groupreply_table = "radgroupreply"
+	usergroup_table = "radusergroup"
+
+	# A single-file database cannot fan out; keep the pool tight.
+	pool {
+		start = 1
+		min = 1
+		max = 2
+		spare = 1
+		uses = 0
+		lifetime = 0
+		idle_timeout = 60
+	}
+
+	# Used by the session section (Simultaneous-Use checks).
+	simul_count_query = "\
+		SELECT COUNT(*) \
+		FROM ${acct_table1} \
+		WHERE username = '%{SQL-User-Name}' \
+		AND acctstoptime IS NULL"
+
+	# ------------------------------------------------------ authorization
+
+	authorize {
+		check_query = "\
+			SELECT id, username, attribute, value, op \
+			FROM ${authcheck_table} \
+			WHERE username = '%{SQL-User-Name}' \
+			ORDER BY id"
+
+		reply_query = "\
+			SELECT id, username, attribute, value, op \
+			FROM ${authreply_table} \
+			WHERE username = '%{SQL-User-Name}' \
+			ORDER BY id"
+
+		group_check_query = "\
+			SELECT id, groupname, attribute, value, op \
+			FROM ${groupcheck_table} \
+			WHERE groupname = '%{SQL-Group}' \
+			ORDER BY id"
+
+		group_reply_query = "\
+			SELECT id, groupname, attribute, value, op \
+			FROM ${groupreply_table} \
+			WHERE groupname = '%{SQL-Group}' \
+			ORDER BY id"
+
+		usergroup_query = "\
+			SELECT groupname \
+			FROM ${usergroup_table} \
+			WHERE username = '%{SQL-User-Name}' \
+			ORDER BY priority"
+	}
+
+	# --------------------------------------------------------- accounting
+	#
+	# Kept deliberately simple and correct: insert on start, update time
+	# and byte counters on interim, close the row on stop. Duplicate
+	# inserts fail against the acctuniqueid UNIQUE index and are logged —
+	# harmless, no row is duplicated.
+
+	accounting {
+		reference = "%{tolower:type.%{Acct-Status-Type}.query}"
+
+		type {
+			accounting-on {
+				query = "\
+					UPDATE ${acct_table1} \
+					SET acctstoptime = '%S', \
+						acctterminatecause = 'NAS-Reboot' \
+					WHERE acctstoptime IS NULL \
+					AND nasipaddress = '%{NAS-IP-Address}'"
+			}
+
+			accounting-off {
+				query = "\
+					UPDATE ${acct_table1} \
+					SET acctstoptime = '%S', \
+						acctterminatecause = 'NAS-Reboot' \
+					WHERE acctstoptime IS NULL \
+					AND nasipaddress = '%{NAS-IP-Address}'"
+			}
+
+			start {
+				query = "\
+					INSERT INTO ${acct_table1} (\
+						acctsessionid, acctuniqueid, username, \
+						realm, nasipaddress, nasportid, \
+						nasporttype, acctstarttime, acctupdatetime, \
+						acctauthentic, connectinfo_start, \
+						calledstationid, callingstationid, \
+						servicetype, framedprotocol, framedipaddress \
+					) VALUES (\
+						'%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', \
+						'%{SQL-User-Name}', \
+						NULLIF('%{Realm}', ''), '%{NAS-IP-Address}', \
+						NULLIF('%{NAS-Port-Id}', ''), \
+						NULLIF('%{NAS-Port-Type}', ''), \
+						'%S', '%S', \
+						NULLIF('%{Acct-Authentic}', ''), \
+						NULLIF('%{Connect-Info}', ''), \
+						'%{Called-Station-Id}', '%{Calling-Station-Id}', \
+						NULLIF('%{Service-Type}', ''), \
+						NULLIF('%{Framed-Protocol}', ''), \
+						NULLIF('%{Framed-IP-Address}', '') \
+					)"
+			}
+
+			interim-update {
+				query = "\
+					UPDATE ${acct_table1} \
+					SET acctupdatetime = '%S', \
+						acctsessiontime = '%{Acct-Session-Time}', \
+						acctinputoctets = \
+							'%{%{Acct-Input-Gigawords}:-0}' * 4294967296 + \
+							'%{%{Acct-Input-Octets}:-0}', \
+						acctoutputoctets = \
+							'%{%{Acct-Output-Gigawords}:-0}' * 4294967296 + \
+							'%{%{Acct-Output-Octets}:-0}', \
+						framedipaddress = NULLIF('%{Framed-IP-Address}', '') \
+					WHERE acctuniqueid = '%{Acct-Unique-Session-Id}' \
+					AND acctstoptime IS NULL"
+			}
+
+			stop {
+				query = "\
+					UPDATE ${acct_table1} \
+					SET acctstoptime = '%S', \
+						acctupdatetime = '%S', \
+						acctsessiontime = '%{Acct-Session-Time}', \
+						acctinputoctets = \
+							'%{%{Acct-Input-Gigawords}:-0}' * 4294967296 + \
+							'%{%{Acct-Input-Octets}:-0}', \
+						acctoutputoctets = \
+							'%{%{Acct-Output-Gigawords}:-0}' * 4294967296 + \
+							'%{%{Acct-Output-Octets}:-0}', \
+						acctterminatecause = NULLIF('%{Acct-Terminate-Cause}', ''), \
+						connectinfo_stop = NULLIF('%{Connect-Info}', ''), \
+						framedipaddress = NULLIF('%{Framed-IP-Address}', '') \
+					WHERE acctuniqueid = '%{Acct-Unique-Session-Id}' \
+					AND acctstoptime IS NULL"
+			}
+		}
+	}
+
+	# ---------------------------------------------------------- post-auth
+	#
+	# Passwords are deliberately NOT logged — the panel already knows the
+	# credentials it issues.
+
+	post-auth {
+		query = "\
+			INSERT INTO ${postauth_table} \
+				(username, pass, reply, authdate) \
+			VALUES (\
+				'%{SQL-User-Name}', '', \
+				'%{reply:Packet-Type}', '%S' \
+			)"
+	}
+}

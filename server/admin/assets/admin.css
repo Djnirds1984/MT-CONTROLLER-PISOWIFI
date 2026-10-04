@@ -1,0 +1,424 @@
+/* AIRCOINS NETFI admin panel — self-contained, no external fonts/CDNs. */
+
+:root {
+  --teal: #00bcd4;
+  --teal-deep: #00838f;
+  --side: #14232b;
+  --side-ink: #b8ccd4;
+  --ink: #1c2b33;
+  --muted: #6b7c85;
+  --line: #dde6ea;
+  --bg: #eef4f6;
+  --card: #ffffff;
+  --bad: #c62828;
+  --bad-bg: #fdecea;
+  --ok: #2e7d32;
+  --ok-bg: #e8f5e9;
+  --warn: #b26a00;
+  --warn-bg: #fff3e0;
+  --radius: 12px;
+  --font: -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+}
+
+code {
+  background: #eef2f4;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 13px;
+}
+
+/* ------------------------------ layout ------------------------------ */
+
+.adm-app { display: flex; min-height: 100vh; }
+
+.adm-side {
+  width: 210px;
+  flex: none;
+  background: var(--side);
+  color: var(--side-ink);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.adm-logo {
+  padding: 20px 18px 14px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+.adm-logo span {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-top: 2px;
+}
+
+.adm-nav { display: flex; flex-direction: column; padding: 6px 0; }
+
+.adm-nav a {
+  display: block;
+  padding: 10px 18px;
+  color: var(--side-ink);
+  text-decoration: none;
+  font-size: 14px;
+  border-left: 3px solid transparent;
+}
+
+.adm-nav a:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+.adm-nav a.active {
+  background: rgba(0, 188, 212, 0.12);
+  color: #fff;
+  border-left-color: var(--teal);
+}
+
+.adm-side-foot {
+  margin-top: auto;
+  padding: 14px 18px;
+  font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.adm-main {
+  flex: 1;
+  padding: 22px 26px 60px;
+  min-width: 0;
+}
+
+.adm-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.adm-view-head h2 { margin: 0; font-size: 21px; }
+
+/* ------------------------------ cards ------------------------------- */
+
+.adm-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 5px rgba(28, 43, 51, 0.05);
+}
+
+.adm-card h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.adm-hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+.adm-pre {
+  background: #10242c;
+  color: #b8f0e1;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  overflow: auto;
+  max-height: 260px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ------------------------------ forms ------------------------------- */
+
+.adm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.adm-field {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.adm-field input, .adm-field select, .adm-input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  font-size: 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.adm-field input:focus, .adm-field select:focus, .adm-input:focus {
+  outline: 2px solid var(--teal);
+  border-color: var(--teal);
+}
+
+.adm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  margin: 6px 0 10px;
+}
+
+.adm-check.slim { margin: 0; }
+
+.adm-check input { width: 16px; height: 16px; }
+
+/* ----------------------------- buttons ------------------------------ */
+
+.adm-btn {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--teal-deep);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.adm-btn:hover { background: #006974; }
+.adm-btn:disabled { opacity: 0.55; cursor: wait; }
+.adm-btn.wide { width: 100%; margin-top: 6px; }
+
+.adm-btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--side-ink);
+  width: 100%;
+  margin-top: 8px;
+}
+
+.adm-btn.ghost:hover { background: rgba(255, 255, 255, 0.08); }
+
+.adm-btn.danger { background: var(--bad); }
+.adm-btn.small { padding: 5px 10px; font-size: 13px; }
+
+.adm-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.adm-toolbar .adm-input { width: auto; margin-top: 0; }
+
+/* ------------------------------ tables ------------------------------ */
+
+.adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.adm-table th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 8px 8px 8px 0;
+  border-bottom: 2px solid var(--line);
+}
+
+.adm-table td {
+  padding: 9px 8px 9px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  word-break: break-all;
+}
+
+.adm-table tr:last-child td { border-bottom: none; }
+
+/* ------------------------------ badges ------------------------------ */
+
+.adm-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adm-badge.ok { background: var(--ok-bg); color: var(--ok); }
+.adm-badge.bad { background: var(--bad-bg); color: var(--bad); }
+.adm-badge.warn { background: var(--warn-bg); color: var(--warn); }
+.adm-badge.info { background: #e3f2fd; color: #1565c0; }
+
+/* ------------------------------ alerts ------------------------------ */
+
+.adm-alert {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin: 0 0 10px;
+  word-break: break-word;
+}
+
+.adm-alert.err { background: var(--bad-bg); color: var(--bad); }
+.adm-alert.ok { background: var(--ok-bg); color: var(--ok); }
+.adm-alert.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* ------------------------------ login ------------------------------- */
+
+.adm-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.adm-login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 26px 24px;
+  box-shadow: 0 8px 30px rgba(28, 43, 51, 0.12);
+}
+
+.adm-brand { margin: 0; font-size: 24px; letter-spacing: 1px; }
+.adm-brand span { color: var(--teal-deep); }
+.adm-sub { margin: 4px 0 18px; color: var(--muted); font-size: 13px; }
+
+/* ------------------------------ stats ------------------------------- */
+
+.adm-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.adm-stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.adm-stat b { display: block; font-size: 26px; margin-top: 2px; }
+
+.adm-stat span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+/* ------------------------------ toast ------------------------------- */
+
+.adm-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: var(--side);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  max-width: 340px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+}
+
+.adm-toast.err { background: var(--bad); }
+
+/* --------------------------- mikrotik view -------------------------- */
+
+.adm-check-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.adm-check-row:last-child { border-bottom: none; }
+
+.adm-check-row .adm-badge { flex: none; min-width: 52px; text-align: center; }
+
+.adm-check-row div { min-width: 0; }
+
+.adm-check-row small {
+  display: block;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.adm-check-row small.warn { color: var(--warn); }
+
+.adm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.adm-chips .adm-badge { font-size: 13px; }
+
+/* ----------------------------- vendo cards -------------------------- */
+
+.adm-vendo {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.adm-vendo h3 { margin: 0 0 10px; font-size: 16px; color: var(--ink); }
+
+.adm-rate-row { display: flex; gap: 8px; margin-bottom: 6px; }
+
+.adm-rate-row input { width: 110px; }
+
+/* ---------------------------- responsive ---------------------------- */
+
+@media (max-width: 800px) {
+  .adm-app { flex-direction: column; }
+
+  .adm-side {
+    width: 100%;
+    height: auto;
+    position: static;
+  }
+
+  .adm-nav { flex-direction: row; flex-wrap: wrap; }
+
+  .adm-nav a { border-left: none; border-bottom: 3px solid transparent; }
+
+  .adm-nav a.active { border-bottom-color: var(--teal); }
+
+  .adm-side-foot { display: flex; align-items: center; gap: 10px; }
+
+  .adm-side-foot .adm-btn { width: auto; margin-top: 0; }
+
+  .adm-main { padding: 16px 12px 40px; }
+}

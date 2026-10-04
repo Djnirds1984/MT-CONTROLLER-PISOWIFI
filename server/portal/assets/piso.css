@@ -1,0 +1,172 @@
+/* AIRCOINS NETFI captive portal — self-contained, no external fonts/CDNs. */
+
+:root {
+  --teal: #00bcd4;
+  --teal-deep: #0097a7;
+  --ink: #1c2b33;
+  --muted: #6b7c85;
+  --line: #e2e9ec;
+  --bg: #f2f7f8;
+  --card: #ffffff;
+  --bad: #c62828;
+  --bad-bg: #fdecea;
+  --ok-bg: #e8f5e9;
+  --ok-ink: #1b5e20;
+  --radius: 14px;
+  --font: -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+.piso-wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.piso-head { text-align: center; margin-bottom: 18px; }
+
+.piso-brand {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 1px;
+  color: var(--teal-deep);
+}
+
+.piso-sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+.piso-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 6px rgba(28, 43, 51, 0.06);
+}
+
+.piso-h {
+  margin: 0 0 12px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.piso-row { display: flex; gap: 8px; }
+
+.piso-input {
+  flex: 1;
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.piso-input:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
+
+.piso-btn {
+  padding: 12px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--teal);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.piso-btn:active { background: var(--teal-deep); }
+.piso-btn:disabled { opacity: 0.55; cursor: wait; }
+
+.piso-btn-wide { width: 100%; margin-top: 4px; }
+
+.piso-btn-danger { background: var(--bad); }
+
+.piso-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 2px 0 4px;
+}
+
+.piso-hint { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+
+.piso-error {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+  margin-bottom: 14px;
+  word-break: break-word;
+}
+
+.piso-info {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+
+.piso-status {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #eef6f8;
+  font-size: 14px;
+}
+
+.piso-status.err { background: var(--bad-bg); color: var(--bad); }
+
+.piso-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+.piso-table td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.piso-table tr:last-child td { border-bottom: none; }
+
+.piso-table .piso-amt { text-align: right; font-weight: 700; color: var(--teal-deep); }
+
+.piso-kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.piso-kv:last-child { border-bottom: none; }
+.piso-kv span { color: var(--muted); }
+.piso-kv b { font-weight: 600; word-break: break-all; text-align: right; }
+
+.piso-meta {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 20px;
+  word-break: break-all;
+}
+
+.piso-backlink {
+  display: block;
+  text-align: center;
+  margin-top: 14px;
+  color: var(--teal-deep);
+  font-size: 14px;
+}

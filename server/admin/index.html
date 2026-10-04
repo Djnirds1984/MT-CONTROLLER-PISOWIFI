@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AIRCOINS NETFI — Admin</title>
+<link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+
+<!-- ============================== login ============================== -->
+<div id="loginView" class="adm-login" hidden>
+  <form id="loginForm" class="adm-login-card" autocomplete="on">
+    <h1 class="adm-brand">AIRCOINS <span>NETFI</span></h1>
+    <p class="adm-sub">Admin panel</p>
+    <div id="loginErr" class="adm-alert err" hidden></div>
+    <label class="adm-field">Username
+      <input id="loginUser" autocomplete="username" required>
+    </label>
+    <label class="adm-field">Password
+      <input id="loginPass" type="password" autocomplete="current-password" required>
+    </label>
+    <button class="adm-btn wide" type="submit">Sign in</button>
+    <p class="adm-hint">Same address as the portal — this route is the
+      only way in. Five wrong tries lock the IP for five minutes.</p>
+  </form>
+</div>
+
+<!-- =============================== app =============================== -->
+<div id="appView" class="adm-app" hidden>
+  <aside class="adm-side">
+    <div class="adm-logo">AIRCOINS<span>NETFI admin</span></div>
+    <nav id="nav" class="adm-nav">
+      <a href="#/dashboard" data-view="dashboard">Dashboard</a>
+      <a href="#/vouchers" data-view="vouchers">Vouchers</a>
+      <a href="#/users" data-view="users">Users</a>
+      <a href="#/vendo" data-view="vendo">Vendo machines</a>
+      <a href="#/sessions" data-view="sessions">Live sessions</a>
+      <a href="#/router" data-view="router">MikroTik setup</a>
+      <a href="#/settings" data-view="settings">Settings</a>
+      <a href="#/tools" data-view="tools">Tools</a>
+    </nav>
+    <div class="adm-side-foot">
+      <span id="adminWho"></span>
+      <button id="logoutBtn" class="adm-btn ghost" type="button">Log out</button>
+    </div>
+  </aside>
+
+  <main class="adm-main">
+    <div id="toast" class="adm-toast" hidden></div>
+
+    <!-- dashboard -->
+    <section id="view-dashboard" class="adm-view" hidden>
+      <div class="adm-view-head">
+        <h2>Dashboard</h2>
+        <button id="dashRefresh" class="adm-btn" type="button">Refresh</button>
+      </div>
+      <div id="statGrid" class="adm-stats"></div>
+      <div id="dashNote" class="adm-alert" hidden></div>
+      <div class="adm-card">
+        <h3>Recent coin activity</h3>
+        <table class="adm-table">
+          <thead><tr><th>MAC</th><th>Coins</th><th>Added</th><th>When</th></tr></thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- vouchers -->
+    <section id="view-vouchers" class="adm-view" hidden>
+      <div class="adm-view-head"><h2>Vouchers</h2></div>
+      <div class="adm-card">
+        <h3>Generate</h3>
+        <div class="adm-grid">
+          <label class="adm-field">Count (1–500)
+            <input id="vgCount" type="number" min="1" max="500" value="10">
+          </label>
+          <label class="adm-field">Minutes per voucher (5–43200)
+            <input id="vgMinutes" type="number" min="5" max="43200" value="60">
+          </label>
+          <label class="adm-field">Prefix (optional, max 8)
+            <input id="vgPrefix" maxlength="8" placeholder="AIR">
+          </label>
+        </div>
+        <div id="vgErr" class="adm-alert err" hidden></div>
+        <button id="vgBtn" class="adm-btn" type="button">Generate codes</button>
+      </div>
+      <div id="genBox" class="adm-card" hidden>
+        <h3>Batch <span id="genBatch"></span> — <span id="genCount"></span> codes</h3>
+        <pre id="genCodes" class="adm-pre"></pre>
+        <button id="genCopy" class="adm-btn" type="button">Copy all</button>
+        <button id="genDl" class="adm-btn" type="button">Download .txt</button>
+      </div>
+      <div class="adm-card">
+        <div class="adm-toolbar">
+          <select id="vFilter" class="adm-input">
+            <option value="all">All</option>
+            <option value="unused">Unused</option>
+            <option value="used">Used</option>
+          </select>
+          <input id="vSearch" class="adm-input" placeholder="Search code...">
+          <button id="vRefresh" class="adm-btn" type="button">Refresh</button>
+        </div>
+        <table class="adm-table">
+          <thead><tr><th>Code</th><th>Time</th><th>Status</th><th>First use</th><th>Logins</th><th>Batch</th><th></th></tr></thead>
+          <tbody id="vBody"></tbody>
+        </table>
+        <p id="vNote" class="adm-hint"></p>
+      </div>
+    </section>
+
+    <!-- users -->
+    <section id="view-users" class="adm-view" hidden>
+      <div class="adm-view-head"><h2>Users</h2></div>
+      <div class="adm-card">
+        <h3>Create / extend a user</h3>
+        <div class="adm-grid">
+          <label class="adm-field">Username or MAC
+            <input id="uUser" placeholder="AABBCCDDEEFF or member1">
+          </label>
+          <label class="adm-field">Password (blank = same as username)
+            <input id="uPass" placeholder="optional">
+          </label>
+          <label class="adm-field">Minutes (5–43200)
+            <input id="uMinutes" type="number" min="5" max="43200" value="60">
+          </label>
+        </div>
+        <label class="adm-check">
+          <input id="uExtend" type="checkbox"> Extend — add minutes on top of
+          the existing balance instead of replacing it
+        </label>
+        <div id="uErr" class="adm-alert err" hidden></div>
+        <button id="uSave" class="adm-btn" type="button">Save user</button>
+      </div>
+      <div class="adm-card">
+        <div class="adm-toolbar">
+          <input id="uSearch" class="adm-input" placeholder="Filter username...">
+          <button id="uRefresh" class="adm-btn" type="button">Refresh</button>
+        </div>
+        <table class="adm-table">
+          <thead><tr><th>Username</th><th>Type</th><th>Password</th><th>Time left</th><th>Logins</th><th>First use</th><th></th></tr></thead>
+          <tbody id="uBody"></tbody>
+        </table>
+        <p id="uNote" class="adm-hint"></p>
+      </div>
+    </section>
+
+    <!-- vendo -->
+    <section id="view-vendo" class="adm-view" hidden>
+      <div class="adm-view-head">
+        <h2>Vendo machines</h2>
+        <button id="dvAdd" class="adm-btn" type="button">Add device</button>
+      </div>
+      <p class="adm-hint">Each NodeMCU coin acceptor points at this panel via
+        its API URL. Coins posted to <code>/api/insertCoin.php</code> credit
+        the paying device's MAC.</p>
+      <div id="vendoList"></div>
+    </section>
+
+    <!-- sessions -->
+    <section id="view-sessions" class="adm-view" hidden>
+      <div class="adm-view-head">
+        <h2>Live sessions</h2>
+        <div class="adm-toolbar">
+          <label class="adm-check slim"><input id="sAuto" type="checkbox" checked> auto 15s</label>
+          <button id="sRefresh" class="adm-btn" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="sNote" class="adm-alert" hidden></div>
+      <div class="adm-card">
+        <table class="adm-table">
+          <thead><tr><th>User</th><th>IP</th><th>MAC</th><th>Uptime</th><th>Time left</th><th>Server</th><th></th></tr></thead>
+          <tbody id="sBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- mikrotik configurator -->
+    <section id="view-router" class="adm-view" hidden>
+      <div class="adm-view-head">
+        <h2>MikroTik setup</h2>
+        <button id="mtRefresh" class="adm-btn" type="button">Re-check</button>
+      </div>
+      <p class="adm-hint">Configures the router over its REST API so hotspot
+        logins go through this panel's FreeRADIUS. Safe to re-run: entries
+        tagged <code>aircoins</code> are updated in place, never duplicated.
+        After applying, upload the redirect stubs from Tools.</p>
+      <div id="mtChecks" class="adm-card"></div>
+      <div class="adm-card">
+        <h3>Bind this router to the panel</h3>
+        <div class="adm-grid">
+          <label class="adm-field">SBC IP (RADIUS target + walled garden)
+            <input id="mtIP" placeholder="10.0.0.252">
+          </label>
+          <div>
+            <label class="adm-field">RADIUS shared secret (8–64 chars)
+              <input id="mtSecret" placeholder="type or generate">
+            </label>
+            <button id="mtGen" class="adm-btn small" type="button">Generate secret</button>
+          </div>
+          <label class="adm-field">SBC MAC (optional, for IP binding)
+            <input id="mtMac" placeholder="AA:BB:CC:DD:EE:FF">
+          </label>
+          <label class="adm-field">Hotspot interface
+            <select id="mtIface"><option value="">— refresh first —</option></select>
+          </label>
+        </div>
+        <label class="adm-check">
+          <input id="mtCreate" type="checkbox"> Create the hotspot server if
+          it is missing (only if DHCP already serves that interface)
+        </label>
+        <div id="mtErr" class="adm-alert err" hidden></div>
+        <button id="mtApply" class="adm-btn" type="button">Apply configuration</button>
+        <p class="adm-hint">The secret must match the one FreeRADIUS uses for
+          this router (<code>clients.conf</code>). Current value is visible in
+          Settings after the first apply.</p>
+      </div>
+      <div id="mtResults" class="adm-card" hidden></div>
+    </section>
+
+    <!-- settings -->
+    <section id="view-settings" class="adm-view" hidden>
+      <div class="adm-view-head"><h2>Settings</h2></div>
+      <div class="adm-card">
+        <div class="adm-grid">
+          <label class="adm-field">Portal name
+            <input id="st_portal_name" maxlength="40">
+          </label>
+          <label class="adm-field">SBC URL (router-reachable portal base)
+            <input id="st_sbc_url" placeholder="http://10.0.0.252">
+          </label>
+          <label class="adm-field">Router REST URL
+            <input id="st_router_url" placeholder="http://10.0.0.1">
+          </label>
+          <label class="adm-field">Router user
+            <input id="st_router_user">
+          </label>
+          <label class="adm-field">Router password
+            <input id="st_router_pass" type="password">
+          </label>
+          <label class="adm-field">RADIUS shared secret
+            <input id="st_radius_secret">
+          </label>
+          <label class="adm-field">Rate limit (up/down)
+            <input id="st_rate_limit" placeholder="2M/2M">
+          </label>
+          <label class="adm-field">Idle timeout (seconds)
+            <input id="st_idle_timeout" type="number" min="0">
+          </label>
+          <label class="adm-field">Accounting interim (seconds)
+            <input id="st_interim" type="number" min="0">
+          </label>
+        </div>
+        <div id="stErr" class="adm-alert err" hidden></div>
+        <button id="stSave" class="adm-btn" type="button">Save settings</button>
+      </div>
+      <div class="adm-card">
+        <h3>Hotspot group replies (enforced by FreeRADIUS)</h3>
+        <div id="stGr" class="adm-chips"></div>
+      </div>
+    </section>
+
+    <!-- tools -->
+    <section id="view-tools" class="adm-view" hidden>
+      <div class="adm-view-head">
+        <h2>Tools</h2>
+        <button id="stubAll" class="adm-btn" type="button">Upload all stubs</button>
+      </div>
+      <p class="adm-hint">The router only needs four thin redirector pages in
+        <code>flash/hotspot</code>; the real portal lives here on the SBC.
+        Uploads replace <code>{{SBC_URL}}</code> with the SBC URL from
+        Settings, then read the files back to verify.</p>
+      <div id="stubNote" class="adm-alert" hidden></div>
+      <div class="adm-card">
+        <table class="adm-table">
+          <thead><tr><th>Stub</th><th>Status</th><th>Payload</th><th>On router</th><th></th></tr></thead>
+          <tbody id="stubList"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="assets/admin.js"></script>
+</body>
+</html>
