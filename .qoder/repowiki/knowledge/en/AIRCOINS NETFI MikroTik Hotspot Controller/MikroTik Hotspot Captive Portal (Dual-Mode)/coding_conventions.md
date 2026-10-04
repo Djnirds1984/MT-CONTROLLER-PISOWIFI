@@ -1,5 +1,0 @@
-- Client-side code avoids frameworks and uses IIFE-wrapped vanilla JS with explicit `try/catch` around DOM patching so the portal stays usable even if token substitution fails.
-- The `window.PORTAL` object is the single contract between varbridge and every other portal script, exposing `external`, `params`, `qs()`, `statusUrl()`, and `loginUrl()` instead of reading `location.search` directly.
-- Token substitution targets only a whitelisted set of literals (`$(mac)`, `$(ip)`, `$(username)`, `$(error)`, `$(link-logout)`, `$(link-login-only)`) rather than doing a blanket regex replace across the whole document.
-- Server responses go through `aircoins_json()` and wrap all database/router calls in nested try/catch blocks that degrade to `{connected:false}` without leaking stack traces.
-- MAC addresses are normalised to uppercase colon-separated form via `aircoins_norm_mac` before any database or RouterOS lookup.

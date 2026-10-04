@@ -1,1 +1,0 @@
-PHP 8+ with strict types; SQLite via PDO (WAL mode, foreign keys enabled) for persistent state; libsodium `sodium_crypto_secretbox` (XSalsa20-Poly1305) for encrypting router passwords at rest; cURL for the RouterOS v7 REST API; raw `stream_socket_client` for the legacy RouterOS binary protocol; Argon2id password hashing with bcrypt fallback.

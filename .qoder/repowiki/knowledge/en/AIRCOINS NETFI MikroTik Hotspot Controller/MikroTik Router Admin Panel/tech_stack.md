@@ -1,1 +1,0 @@
-Plain PHP with PDO (MySQL/MariaDB), no framework; MikroTik connectivity goes through the project's `includes/RouterOS/RouterFactory` which supports both REST (RouterOS v7, port 443) and Legacy binary API (v6/v7, ports 8728/8729).

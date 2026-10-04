@@ -1,1 +1,0 @@
-Dual-mode captive portal that renders MikroTik hotspot login/status pages natively on the router or via an external SBC web server, with a PHP session lookup API.

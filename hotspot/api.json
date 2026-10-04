@@ -1,7 +1,0 @@
-{
-    "captive": $(if logged-in)"true"$(else)"false"$(endif),
-    "user-portal-url": "$(link-redirect)",
-    "seconds-remaining": "$(session-time-left-secs)",
-    "bytes-remaining": "$(bytes-left)",
-    "can-extend-session": "true"
-}

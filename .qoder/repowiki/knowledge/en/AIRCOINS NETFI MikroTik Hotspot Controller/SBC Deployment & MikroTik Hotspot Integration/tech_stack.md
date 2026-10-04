@@ -1,1 +1,0 @@
-Bash installer targeting Debian/Ubuntu/Armbian SBCs; lighttpd with mod_fastcgi + mod_openssl serving static portal on :80 and a self-signed TLS admin panel on :443; a dedicated php-fpm pool on a UNIX socket (`php<FPMVER>-fpm-aircoins.sock`); SQLite for persistence; libsodium for at-rest encryption; MikroTik RouterOS `.rsc` script for the upstream hotspot redirect.

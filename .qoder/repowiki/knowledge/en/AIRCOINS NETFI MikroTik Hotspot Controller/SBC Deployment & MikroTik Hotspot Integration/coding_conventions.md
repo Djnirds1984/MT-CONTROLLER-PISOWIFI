@@ -1,5 +1,0 @@
-- Configuration files use `@@PLACEHOLDER@@` tokens substituted at install time via `sed -e s#@@X@@#${VAR}#g`, keeping templates portable across PHP versions and distros.
-- Both installer scripts enforce a write-guard that refuses any `copy_tree`/`sync_dir` destination outside `/var/www/aircoins`, preventing accidental filesystem writes.
-- Long-running state (DB, sessions, keys, certs) is kept under dedicated paths (`/var/lib/aircoins`, `/etc/aircoins`, `/etc/lighttpd/certs`) owned by `www-data`, separate from the web root.
-- The php-fpm pool runs as `user = www-data` with `pm = ondemand`, `max_children = 5`, and tight memory/upload limits (32M / 2M) tuned for single-board computers.
-- User-facing shell output uses shared helper functions (`info`, `ok`, `warn`, `err`, `die`, `step`) that emit ANSI-colored prefixes and are disabled when stdout is not a TTY.

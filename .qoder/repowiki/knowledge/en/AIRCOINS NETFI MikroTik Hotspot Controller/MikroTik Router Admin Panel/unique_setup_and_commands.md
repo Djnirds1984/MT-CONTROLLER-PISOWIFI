@@ -1,1 +1,0 @@
-The panel requires the parent project's `includes/` bootstrap (db, auth, csrf, layout, crypto, RouterOS) — there is no local autoloader or build step; serving the directory via any PHP-capable web server is sufficient.
