@@ -52,7 +52,15 @@ die()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 ver_ge() { [ "$(printf '%s\n' "$1" "$2" | sort -V | head -1)" = "$2" ]; }
 
-rand_str() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-20}"; }
+# SIGPIPE-safe on purpose: the script runs under `set -o pipefail`, and a
+# pipeline like `tr < /dev/urandom | head -c N` lets head exit early, so tr
+# dies with 141 on its next write and set -e silently aborts the installer.
+# Bounded producer -> every consumer reads to EOF -> no SIGPIPE, ever.
+rand_str() {
+	local s
+	s="$(head -c 256 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')" || true
+	printf '%s' "${s:0:${1:-20}}"
+}
 
 ask() { # ask VARNAME "prompt" "default"
 	local __var="$1" __prompt="$2" __def="${3:-}" in
