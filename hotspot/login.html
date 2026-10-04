@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <!--
-  AIRCOINS NETFI — Captive Portal Login Page
-  Dual-mode: router-native (MikroTik $(var) substitution) + external (SBC/varbridge.js)
-  Marker comment below is REQUIRED by RouterOS — do NOT remove.
+  AIRCOINS NETFI — Captive Portal Login Page (SBC-only)
+  All context arrives via query params from the router-side redirect stub.
+  No MikroTik $(var) template tags — this page is served exclusively by lighttpd.
 -->
-<!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -22,9 +21,6 @@
 
 <!-- Portal CSS -->
 <link rel="stylesheet" href="css/style.css">
-
-<!-- varbridge.js — dual-mode detection (runs early to patch DOM) -->
-<script src="js/varbridge.js"></script>
 </head>
 <body>
 
@@ -42,8 +38,8 @@
         <div class="piso-status-label">Status</div>
         <div class="piso-status-value disconnected" id="statusText">DISCONNECTED</div>
         <div class="piso-info-row">
-            <span>MAC: <strong id="macDisplay">$(mac)</strong></span>
-            <span>IP: <strong id="ipDisplay">$(ip)</strong></span>
+            <span>MAC: <strong id="macDisplay">--</strong></span>
+            <span>IP: <strong id="ipDisplay">--</strong></span>
         </div>
     </div>
 
@@ -83,32 +79,25 @@
 </div><!-- /.piso-container -->
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     HIDDEN FORM — CHAP login submission (router-native mode)
-     In external mode, varbridge.js patches the action to the router URL.
+     HIDDEN FORM — Voucher login (HTTP-PAP POST to router)
+     Action and dst are set dynamically by the init script below.
      ═══════════════════════════════════════════════════════════════════════ -->
-<form id="sendin" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
-    <input type="hidden" name="dst" value="$(link-orig)">
+<form id="sendin" name="sendin" action="" method="post" style="display:none;">
+    <input type="hidden" name="dst" value="">
     <input type="hidden" name="popup" value="true">
     <input type="hidden" name="username" value="">
     <input type="hidden" name="password" value="">
 </form>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     MEMBER LOGIN FORM — PAP submission
+     MEMBER LOGIN FORM — Username + password (HTTP-PAP POST to router)
      ═══════════════════════════════════════════════════════════════════════ -->
-<form id="memberForm" name="memberForm" action="$(link-login-only)" method="post" style="display:none;">
-    <input type="hidden" name="dst" value="$(link-orig)">
+<form id="memberForm" name="memberForm" action="" method="post" style="display:none;">
+    <input type="hidden" name="dst" value="">
     <input type="hidden" name="popup" value="true">
     <input type="hidden" name="username" value="">
     <input type="hidden" name="password" value="">
 </form>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     MIKROTIK CHAP SCRIPT — only rendered in router-native mode
-     ═══════════════════════════════════════════════════════════════════════ -->
-$(if chap-id)
-<script src="md5.js"></script>
-$(endif)
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      CORE JS — portal logic (vendo, voucher, login)
@@ -193,13 +182,58 @@ $(endif)
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     LOGIN ERROR — MikroTik error variable
+     INIT — Parse query params from router stub, wire up forms
      ═══════════════════════════════════════════════════════════════════════ -->
-$(if error)
 <script>
-    var loginError = "$(error)";
+(function () {
+    "use strict";
+
+    // ── Parse query string ────────────────────────────────────────────────
+    var params = {};
+    var qs = window.location.search.substring(1);
+    if (qs) {
+        qs.split("&").forEach(function (pair) {
+            var parts = pair.split("=");
+            var key = decodeURIComponent(parts[0] || "");
+            var val = decodeURIComponent(parts[1] || "");
+            if (key) params[key] = val;
+        });
+    }
+
+    // ── Fill MAC / IP displays ────────────────────────────────────────────
+    if (params.mac) document.getElementById("macDisplay").textContent = params.mac;
+    if (params.ip)  document.getElementById("ipDisplay").textContent  = params.ip;
+
+    // ── Build the SBC status page URL (used as form dst for post-login redirect) ──
+    var statusUrl = "status.html?mac=" + encodeURIComponent(params.mac || "")
+                  + "&ip="  + encodeURIComponent(params.ip  || "")
+                  + "&user=" + encodeURIComponent(params.user || "");
+
+    // ── Wire up hidden login forms ────────────────────────────────────────
+    var loginUrl = params.login || "";
+
+    var sendin = document.getElementById("sendin");
+    sendin.setAttribute("action", loginUrl);
+    sendin.querySelector('input[name="dst"]').value = statusUrl;
+
+    var memberForm = document.getElementById("memberForm");
+    memberForm.setAttribute("action", loginUrl);
+    memberForm.querySelector('input[name="dst"]').value = statusUrl;
+
+    // ── Store logout URL for the status page ──────────────────────────────
+    if (params.logout) {
+        try { sessionStorage.setItem("aircoins_logout_url", params.logout); } catch (e) {}
+    }
+
+    // ── Show error from query param ───────────────────────────────────────
+    if (params.err) {
+        window.__loginError = params.err;
+    }
+
+    // ── Expose parsed params globally for core.js ─────────────────────────
+    window.PORTAL_PARAMS = params;
+})();
 </script>
-$(endif)
 
 </body>
 </html>

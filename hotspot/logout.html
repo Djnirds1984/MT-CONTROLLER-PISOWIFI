@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!--
-  AIRCOINS NETFI — Logout Page
+  AIRCOINS NETFI — Logout Page (SBC-only)
   Shown after user is logged out (session expired, manual logout).
+  All context arrives via query params from the router-side redirect stub.
 -->
 <html>
 <head>
@@ -15,7 +16,6 @@
 <script src="assets/js/popper.min.js"></script>
 <script src="assets/js/bootstrap.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
-<script src="js/varbridge.js"></script>
 </head>
 <body>
 
@@ -31,8 +31,8 @@
         <div class="piso-status-label">Status</div>
         <div class="piso-status-value disconnected">DISCONNECTED</div>
         <div class="piso-info-row">
-            <span>MAC: <strong>$(mac)</strong></span>
-            <span>IP: <strong>$(ip)</strong></span>
+            <span>MAC: <strong id="macDisplay">--</strong></span>
+            <span>IP: <strong id="ipDisplay">--</strong></span>
         </div>
     </div>
 
@@ -42,7 +42,7 @@
     </div>
 
     <div class="piso-actions">
-        <a href="$(link-login-only)?mac=$(mac)&ip=$(ip)" class="piso-btn piso-btn-primary">LOG IN AGAIN</a>
+        <a href="#" class="piso-btn piso-btn-primary" id="loginAgainBtn">LOG IN AGAIN</a>
     </div>
 
     <div class="piso-footer">
@@ -50,6 +50,35 @@
     </div>
 
 </div>
+
+<script>
+(function () {
+    "use strict";
+
+    // ── Parse query params ────────────────────────────────────────────────
+    var params = {};
+    var qs = window.location.search.substring(1);
+    if (qs) {
+        qs.split("&").forEach(function (pair) {
+            var parts = pair.split("=");
+            var key = decodeURIComponent(parts[0] || "");
+            var val = decodeURIComponent(parts[1] || "");
+            if (key) params[key] = val;
+        });
+    }
+
+    // ── Fill MAC / IP displays ────────────────────────────────────────────
+    if (params.mac) document.getElementById("macDisplay").textContent = params.mac;
+    if (params.ip)  document.getElementById("ipDisplay").textContent  = params.ip;
+
+    // ── Set "LOG IN AGAIN" link ───────────────────────────────────────────
+    var loginUrl = params.login || "login.html";
+    var href = loginUrl + "?mac=" + encodeURIComponent(params.mac || "")
+             + "&ip="  + encodeURIComponent(params.ip  || "")
+             + "&login=" + encodeURIComponent(params.login || "");
+    document.getElementById("loginAgainBtn").setAttribute("href", href);
+})();
+</script>
 
 </body>
 </html>

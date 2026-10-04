@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!--
-  AIRCOINS NETFI — After-Login Redirect Page
-  MikroTik shows this after successful authentication.
-  Follows $(link-redirect) to the status page.
+  AIRCOINS NETFI — After-Login Redirect Page (SBC-only)
+  MikroTik shows this after successful authentication (served by router stub).
+  This SBC copy is a fallback — the router stub's $(link-redirect) handles the
+  actual redirect. If reached directly, redirect to the status page.
 -->
 <html>
 <head>
@@ -16,13 +17,24 @@
 <script src="assets/js/popper.min.js"></script>
 <script src="assets/js/bootstrap.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
-<script src="js/varbridge.js"></script>
 
-<meta http-equiv="refresh" content="2; url=$(link-redirect)">
 <script>
-    setTimeout(function () {
-        location.replace("$(link-redirect)");
-    }, 2000);
+(function () {
+    "use strict";
+    // If a redirect param is provided, use it; otherwise go to status page
+    var qs = window.location.search.substring(1);
+    var params = {};
+    if (qs) {
+        qs.split("&").forEach(function (pair) {
+            var parts = pair.split("=");
+            var key = decodeURIComponent(parts[0] || "");
+            var val = decodeURIComponent(parts[1] || "");
+            if (key) params[key] = val;
+        });
+    }
+    var target = params.redirect || "status.html";
+    setTimeout(function () { location.replace(target); }, 2000);
+})();
 </script>
 </head>
 <body>

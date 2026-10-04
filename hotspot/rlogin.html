@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!--
-  AIRCOINS NETFI — Re-Login Page
+  AIRCOINS NETFI — Re-Login Page (SBC-only)
   Shown when re-authentication is required (e.g. session expired, walled garden).
+  Redirects to the SBC login page.
 -->
 <html>
 <head>
@@ -15,11 +16,14 @@
 <script src="assets/js/popper.min.js"></script>
 <script src="assets/js/bootstrap.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
-<script src="js/varbridge.js"></script>
 
-<meta http-equiv="refresh" content="0; url=$(link-login)">
 <script>
-    location.replace("$(link-login)");
+(function () {
+    "use strict";
+    // Redirect to the SBC login page, preserving any query params
+    var target = "login.html" + window.location.search;
+    location.replace(target);
+})();
 </script>
 </head>
 <body>

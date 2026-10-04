@@ -3,8 +3,23 @@
 <head>
 <meta charset="utf-8">
 <title>AIRCOINS NETFI - Redirect</title>
-<meta http-equiv="refresh" content="0; url=$(link-redirect)">
-<script>location.replace("$(link-redirect)");</script>
+<script>
+(function () {
+    "use strict";
+    var qs = window.location.search.substring(1);
+    var params = {};
+    if (qs) {
+        qs.split("&").forEach(function (pair) {
+            var parts = pair.split("=");
+            var key = decodeURIComponent(parts[0] || "");
+            var val = decodeURIComponent(parts[1] || "");
+            if (key) params[key] = val;
+        });
+    }
+    var target = params.redirect || "status.html";
+    location.replace(target);
+})();
+</script>
 </head>
 <body>
 <p>Redirecting...</p>

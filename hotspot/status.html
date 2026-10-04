@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
-  AIRCOINS NETFI — Status Page (post-login)
+  AIRCOINS NETFI — Status Page (post-login, SBC-only)
   Shows connected session info with live polling via /api/session.php.
-  Dual-mode: router-native + external (SBC).
+  All context arrives via query params; logout URL from sessionStorage.
 -->
 <html>
 <head>
@@ -16,7 +16,6 @@
 <script src="assets/js/popper.min.js"></script>
 <script src="assets/js/bootstrap.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
-<script src="js/varbridge.js"></script>
 </head>
 <body>
 
@@ -34,8 +33,8 @@
         <div class="piso-status-label">Status</div>
         <div class="piso-status-value connected" id="statusText">CONNECTED</div>
         <div class="piso-info-row">
-            <span>MAC: <strong id="macDisplay">$(mac)</strong></span>
-            <span>IP: <strong id="ipDisplay">$(ip)</strong></span>
+            <span>MAC: <strong id="macDisplay">--</strong></span>
+            <span>IP: <strong id="ipDisplay">--</strong></span>
         </div>
     </div>
 
@@ -49,7 +48,7 @@
     <div class="piso-session-info">
         <div class="piso-session-row">
             <span class="piso-session-key">Username</span>
-            <span class="piso-session-val" id="sessionUser">$(username)</span>
+            <span class="piso-session-val" id="sessionUser">--</span>
         </div>
         <div class="piso-session-row">
             <span class="piso-session-key">Uptime</span>
@@ -71,7 +70,7 @@
 
     <!-- ── Actions ─────────────────────────────────────────────────────── -->
     <div class="piso-actions">
-        <a href="$(link-logout)" class="piso-btn piso-btn-coin" id="disconnectBtn">DISCONNECT</a>
+        <a href="#" class="piso-btn piso-btn-coin" id="disconnectBtn">DISCONNECT</a>
     </div>
 
     <!-- ── Footer ──────────────────────────────────────────────────────── -->
@@ -85,11 +84,33 @@
 (function ($) {
     "use strict";
 
-    var pollInterval = null;
-    var mac = (window.PORTAL && window.PORTAL.mac) || "$(mac)";
+    // ── Parse query params ────────────────────────────────────────────────
+    var params = {};
+    var qs = window.location.search.substring(1);
+    if (qs) {
+        qs.split("&").forEach(function (pair) {
+            var parts = pair.split("=");
+            var key = decodeURIComponent(parts[0] || "");
+            var val = decodeURIComponent(parts[1] || "");
+            if (key) params[key] = val;
+        });
+    }
+
+    var mac = params.mac || "";
     var apiBase = (typeof sbcApiUrl !== "undefined" && sbcApiUrl) ? sbcApiUrl : "";
 
-    // ── Format bytes ──────────────────────────────────────────────────
+    // ── Fill MAC / IP displays ────────────────────────────────────────────
+    if (params.mac) $("#macDisplay").text(params.mac);
+    if (params.ip)  $("#ipDisplay").text(params.ip);
+
+    // ── Set disconnect button href from sessionStorage ────────────────────
+    var logoutUrl = "";
+    try { logoutUrl = sessionStorage.getItem("aircoins_logout_url") || ""; } catch (e) {}
+    if (logoutUrl) {
+        $("#disconnectBtn").attr("href", logoutUrl);
+    }
+
+    // ── Format bytes ──────────────────────────────────────────────────────
     function fmtBytes(bytes) {
         bytes = parseInt(bytes) || 0;
         if (bytes === 0) return "0 B";
@@ -100,7 +121,7 @@
         return (i === 0 ? val : val.toFixed(1)) + " " + units[i];
     }
 
-    // ── Format seconds to HH:MM:SS ────────────────────────────────────
+    // ── Format seconds to HH:MM:SS ────────────────────────────────────────
     function fmtTime(secs) {
         secs = parseInt(secs) || 0;
         if (secs < 0) secs = 0;
@@ -112,7 +133,7 @@
                (s < 10 ? "0" : "") + s;
     }
 
-    // ── Parse MikroTik time string to seconds ─────────────────────────
+    // ── Parse MikroTik time string to seconds ─────────────────────────────
     function parseTime(str) {
         if (!str) return 0;
         str = String(str).trim();
@@ -128,7 +149,9 @@
         return total;
     }
 
-    // ── Poll session ──────────────────────────────────────────────────
+    // ── Poll session ──────────────────────────────────────────────────────
+    var pollInterval = null;
+
     function pollSession() {
         $.ajax({
             url: apiBase + "/api/session.php",
@@ -161,7 +184,7 @@
         });
     }
 
-    // ── Init ──────────────────────────────────────────────────────────
+    // ── Init ──────────────────────────────────────────────────────────────
     $(document).ready(function () {
         pollSession();
         pollInterval = setInterval(pollSession, 10000); // poll every 10s

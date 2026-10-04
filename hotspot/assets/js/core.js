@@ -1,10 +1,13 @@
 /*
- * AIRCOINS NETFI — Core Portal Logic
+ * AIRCOINS NETFI — Core Portal Logic (SBC-only)
  *
  * Pure Piso WiFi: voucher login, vendo coin-slot, promo rates.
- * NO eload, NO charging features.
+ * NO eload, NO charging features. NO dual-mode, NO CHAP.
  *
- * Depends on: jQuery, Bootstrap 4, config.js, varbridge.js, md5.js (CHAP path)
+ * All portal context (login URL, MAC, IP, error) is parsed by the inline
+ * script in login.html and exposed via window.PORTAL_PARAMS.
+ *
+ * Depends on: jQuery, Bootstrap 4, config.js
  */
 (function ($) {
     "use strict";
@@ -16,6 +19,11 @@
     var expectedCoins     = 0;
     var sessionPollTimer  = null;
 
+    // ── Helper: get portal params (set by login.html init script) ───────────
+    function getParams() {
+        return window.PORTAL_PARAMS || {};
+    }
+
     // ── Init ────────────────────────────────────────────────────────────────
     $(document).ready(function () {
         fetchVendoDevices();
@@ -25,7 +33,7 @@
 
     // ── Show login error from URL param ─────────────────────────────────────
     function showLoginError() {
-        var err = (window.PORTAL && window.PORTAL.error) || "";
+        var err = window.__loginError || "";
         if (err) {
             var msg = "Login failed: " + err;
             showToast(msg, "danger");
@@ -306,9 +314,9 @@
         });
     }
 
-    // ── Login ───────────────────────────────────────────────────────────────
-    // Router-native: CHAP hexMD5(chap-id + password + chap-challenge)
-    // External/SBC:  HTTP-PAP plaintext POST to router login URL
+    // ── Login (HTTP-PAP — plaintext POST to router login URL) ───────────────
+    // The hidden #sendin form's action and dst are already set by login.html's
+    // init script from query params. We just fill credentials and submit.
     function doLogin(voucherCode) {
         var code = voucherCode || $("#voucherInput").val() || "";
         if (!code.trim()) {
@@ -319,42 +327,21 @@
         var $btn = $("#connectBtn");
         $btn.prop("disabled", true).text("Connecting...");
 
-        if (window.PORTAL && window.PORTAL.external) {
-            // ── External mode: HTTP-PAP ─────────────────────────────────────
-            // POST plaintext credentials to the router's login URL
-            var loginUrl = window.PORTAL.login || "";
-            if (!loginUrl) {
-                showToast("No login URL available.", "danger");
-                $btn.prop("disabled", false).text("CONNECT");
-                return;
-            }
-
-            var $form = $("#sendin");
-            $form.attr("action", loginUrl);
-            $form.find("input[name=username]").val(code);
-            $form.find("input[name=password]").val("");
-            $form[0].submit();
-        } else {
-            // ── Router-native mode: CHAP ────────────────────────────────────
-            var chapId    = (window.PORTAL && window.PORTAL.chapId) || "";
-            var challenge = (window.PORTAL && window.PORTAL.chapChallenge) || "";
-
-            if (!chapId || !challenge) {
-                showToast("CHAP authentication data missing.", "danger");
-                $btn.prop("disabled", false).text("CONNECT");
-                return;
-            }
-
-            var hashed = hexMD5(chapId + code + challenge);
-
-            var $form = $("#sendin");
-            $form.find("input[name=username]").val(code);
-            $form.find("input[name=password]").val(hashed);
-            $form[0].submit();
+        var loginUrl = getParams().login || "";
+        if (!loginUrl) {
+            showToast("No login URL available.", "danger");
+            $btn.prop("disabled", false).text("CONNECT");
+            return;
         }
+
+        var $form = $("#sendin");
+        $form.attr("action", loginUrl);
+        $form.find("input[name=username]").val(code);
+        $form.find("input[name=password]").val("");
+        $form[0].submit();
     }
 
-    // ── Member login (PAP — username + password) ────────────────────────────
+    // ── Member login (HTTP-PAP — username + password) ───────────────────────
     function doLoginMember() {
         var user = $("#memberUser").val() || "";
         var pass = $("#memberPass").val() || "";
@@ -367,25 +354,18 @@
         var $btn = $("#memberLoginSubmit");
         $btn.prop("disabled", true).text("Connecting...");
 
-        if (window.PORTAL && window.PORTAL.external) {
-            // External: PAP plaintext
-            var loginUrl = window.PORTAL.login || "";
-            var $form = $("#memberForm");
-            $form.attr("action", loginUrl);
-            $form.find("input[name=username]").val(user);
-            $form.find("input[name=password]").val(pass);
-            $form[0].submit();
-        } else {
-            // Router-native: CHAP
-            var chapId    = (window.PORTAL && window.PORTAL.chapId) || "";
-            var challenge = (window.PORTAL && window.PORTAL.chapChallenge) || "";
-            var hashed = hexMD5(chapId + pass + challenge);
-
-            var $form = $("#memberForm");
-            $form.find("input[name=username]").val(user);
-            $form.find("input[name=password]").val(hashed);
-            $form[0].submit();
+        var loginUrl = getParams().login || "";
+        if (!loginUrl) {
+            showToast("No login URL available.", "danger");
+            $btn.prop("disabled", false).text("LOGIN");
+            return;
         }
+
+        var $form = $("#memberForm");
+        $form.attr("action", loginUrl);
+        $form.find("input[name=username]").val(user);
+        $form.find("input[name=password]").val(pass);
+        $form[0].submit();
     }
 
     // ── Toast notification helper ───────────────────────────────────────────
