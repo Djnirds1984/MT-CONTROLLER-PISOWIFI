@@ -108,7 +108,7 @@ copy_tree() {
 # ----------------------------------------------------------------------------
 # Step 1 — detect architecture, OS and PHP version
 # ----------------------------------------------------------------------------
-step "1/10  Detecting platform"
+step "1/12  Detecting platform"
 ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
 info "Architecture: $ARCH"
 
@@ -143,11 +143,11 @@ info "PHP target (hint): $PHP_HINT"
 # ----------------------------------------------------------------------------
 # Step 2 — apt update + install packages
 # ----------------------------------------------------------------------------
-step "2/10  Installing packages"
+step "2/12  Installing packages"
 info "apt-get update ..."
 apt-get update -y
 
-BASE_PKGS=(lighttpd lighttpd-mod-openssl openssl ufw ca-certificates)
+BASE_PKGS=(lighttpd lighttpd-mod-openssl openssl ufw ca-certificates freeradius freeradius-sqlite freeradius-utils)
 info "Installing base packages: ${BASE_PKGS[*]}"
 apt-get install -y "${BASE_PKGS[@]}"
 
@@ -189,7 +189,7 @@ ok "Detected PHP ${FPMVER}; fpm service '${FPM_SERVICE}'; socket '${FPM_SOCKET}'
 # ----------------------------------------------------------------------------
 # Step 3 — disable conflicting web servers
 # ----------------------------------------------------------------------------
-step "3/10  Disabling conflicting web servers"
+step "3/12  Disabling conflicting web servers"
 for svc in apache2 nginx; do
     if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
         warn "Found ${svc}; disabling + stopping (it would grab port 80)."
@@ -202,7 +202,7 @@ done
 # ----------------------------------------------------------------------------
 # Step 4 — create the deployed directory layout and copy the code
 # ----------------------------------------------------------------------------
-step "4/10  Deploying files into $WWW"
+step "4/12  Deploying files into $WWW"
 mkdir -p "$PORTAL" "$ADMIN" "$INCLUDES" "$API" "$UPLOAD_DIR"
 
 info "hotspot/   -> $PORTAL"       ; copy_tree "$SRC/hotspot"  "$PORTAL"
@@ -221,7 +221,7 @@ ok "Files deployed."
 # ----------------------------------------------------------------------------
 # Step 5 — install lighttpd config + php-fpm pool, restart php-fpm
 # ----------------------------------------------------------------------------
-step "5/10  Writing web server configuration"
+step "5/12  Writing web server configuration"
 
 # Back up the stock lighttpd.conf once, then install our self-contained config.
 if [ -f "$LIGHTTPD_MAIN" ] && [ ! -f "${LIGHTTPD_MAIN}.aircoins-bak" ]; then
@@ -255,7 +255,7 @@ ok "php-fpm running."
 # ----------------------------------------------------------------------------
 # Step 6 — self-signed TLS certificate for the admin site (port 443)
 # ----------------------------------------------------------------------------
-step "6/10  Generating self-signed TLS certificate"
+step "6/12  Generating self-signed TLS certificate"
 CERT_PEM="$CERT_DIR/aircoins.pem"
 if [ -f "$CERT_PEM" ]; then
     info "Certificate already exists at $CERT_PEM — keeping it (delete to regenerate)."
@@ -274,7 +274,7 @@ fi
 # ----------------------------------------------------------------------------
 # Step 7 — libsodium at-rest encryption key (outside the web root)
 # ----------------------------------------------------------------------------
-step "7/10  Creating sodium key at $KEY_DIR/secret.key"
+step "7/12  Creating sodium key at $KEY_DIR/secret.key"
 mkdir -p "$KEY_DIR"
 chown www-data:www-data "$KEY_DIR"
 chmod 700 "$KEY_DIR"
@@ -291,7 +291,7 @@ fi
 # ----------------------------------------------------------------------------
 # Step 8 — initialize the SQLite schema + create the first admin user
 # ----------------------------------------------------------------------------
-step "8/10  Initializing database + admin user"
+step "8/12  Initializing database + admin user"
 
 INIT_PHP="$(mktemp /tmp/aircoins-init-XXXXXX.php)"
 cat > "$INIT_PHP" <<'PHP'
@@ -355,16 +355,121 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Step 9 — firewall (allow 80 + 443). Never auto-enable ufw: that could lock
-#           out an SSH session if 22 is not already allowed.
+# Step 9 — configure FreeRADIUS with SQLite backend
 # ----------------------------------------------------------------------------
-step "9/10  Configuring firewall"
+step "9/12  Configuring FreeRADIUS (SQLite backend)"
+
+RADIUS_DB="${DB_DIR}/radius.db"
+FR_DIR="/etc/freeradius/3.0"
+
+if [ -d "$FR_DIR" ]; then
+    # Ensure the RADIUS DB directory exists with correct ownership
+    mkdir -p "$DB_DIR"
+    chown freerad:freerad "$DB_DIR" 2>/dev/null || chown www-data:www-data "$DB_DIR"
+
+    # --- Configure the SQL module for SQLite ---
+    SQL_CONF="$FR_DIR/mods-enabled/sql"
+    if [ -f "$SQL_CONF" ] || [ -L "$SQL_CONF" ]; then
+        info "Configuring FreeRADIUS SQL module for SQLite ..."
+        # Replace the driver, dialect, and connection info
+        sed -i 's|^\(\s*driver\s*=\s*\)".*"|\1"sqlite"|' "$FR_DIR/mods-available/sql"
+        sed -i 's|^\(\s*dialect\s*=\s*\)".*"|\1"sqlite"|' "$FR_DIR/mods-available/sql"
+        sed -i 's|^\(\s*server\s*=\s*\)".*"|\1"localhost"|' "$FR_DIR/mods-available/sql"
+        # Set the connection string to point at our RADIUS DB
+        sed -i "s|^\(\s*sql\.sqlite\.connect_info\s*=\s*\)\".*\"|\1\"dbdir=${DB_DIR}\"|" "$FR_DIR/mods-available/sql" 2>/dev/null || true
+        # If the above pattern didn't match, try the simpler filename pattern
+        grep -q "dbdir=${DB_DIR}" "$FR_DIR/mods-available/sql" 2>/dev/null || \
+            sed -i "s|\"dbdir=.*\"|\"dbdir=${DB_DIR}\"|" "$FR_DIR/mods-available/sql" 2>/dev/null || true
+
+        # Ensure the pool section is enabled (uncommented)
+        # FreeRADIUS ships with pool { ... } commented out for sqlite
+        sed -i '/^\s*#\s*pool\s*{/,/^\s*#\s*}/ s/^\s*#\s*//' "$FR_DIR/mods-available/sql" 2>/dev/null || true
+
+        # Enable the sql module
+        if [ ! -e "$SQL_CONF" ]; then
+            ln -sf ../mods-available/sql "$SQL_CONF"
+        fi
+        ok "SQL module configured and enabled."
+    else
+        warn "FreeRADIUS SQL module not found at $SQL_CONF — configure manually."
+    fi
+
+    # --- Configure the RADIUS client (MikroTik router) ---
+    CLIENTS_CONF="$FR_DIR/clients.conf"
+    if [ -f "$CLIENTS_CONF" ]; then
+        # Add our MikroTik client if not already present
+        if ! grep -q "AIRCOINS" "$CLIENTS_CONF" 2>/dev/null; then
+            # Default MikroTik IP from the .rsc script; operator should edit to match
+            cat >> "$CLIENTS_CONF" <<'CLIENTEOF'
+
+# AIRCOINS NETFI — MikroTik router RADIUS client
+client router {
+    ipaddr = 192.168.88.1
+    secret = aircoins_secret
+    nastype = other
+}
+CLIENTEOF
+            ok "Added MikroTik RADIUS client to clients.conf (edit ipaddr to match your router)."
+        else
+            info "AIRCOINS RADIUS client already in clients.conf — keeping it."
+        fi
+    else
+        warn "clients.conf not found at $CLIENTS_CONF — configure the RADIUS client manually."
+    fi
+
+    # --- Enable sql in the default site ---
+    DEFAULT_SITE="$FR_DIR/sites-enabled/default"
+    if [ -f "$DEFAULT_SITE" ]; then
+        # Uncomment the sql lines in authorize, accounting, session, post-auth
+        sed -i '/^\s*#\s*sql\b/s/^\s*#\s*//' "$DEFAULT_SITE" 2>/dev/null || true
+        ok "Enabled sql in default site."
+    else
+        warn "Default site not found at $DEFAULT_SITE — enable sql manually."
+    fi
+
+    # --- Initialize the RADIUS database schema ---
+    if [ ! -f "$RADIUS_DB" ] || [ "$(stat -c%s "$RADIUS_DB" 2>/dev/null || echo 0)" -lt 1024 ]; then
+        SCHEMA_SQL="/etc/freeradius/3.0/mods-config/sql/main/sqlite/schema.sql"
+        if [ -f "$SCHEMA_SQL" ]; then
+            info "Importing FreeRADIUS SQLite schema ..."
+            sqlite3 "$RADIUS_DB" < "$SCHEMA_SQL" 2>/dev/null || true
+            chown freerad:freerad "$RADIUS_DB" 2>/dev/null || chown www-data:www-data "$RADIUS_DB"
+            chmod 660 "$RADIUS_DB"
+            ok "RADIUS database initialized at $RADIUS_DB"
+        else
+            warn "Schema file not found at $SCHEMA_SQL — the PHP code will self-heal tables on first use."
+        fi
+    else
+        info "RADIUS database already exists at $RADIUS_DB — keeping it."
+    fi
+
+    # --- Restart FreeRADIUS ---
+    systemctl enable freeradius >/dev/null 2>&1 || true
+    systemctl restart freeradius
+    sleep 1
+    if systemctl is-active --quiet freeradius; then
+        ok "FreeRADIUS is running."
+    else
+        warn "FreeRADIUS did not start. Check: journalctl -u freeradius -n 40"
+        warn "Common fix: ensure the sql module symlink exists: ls -la $FR_DIR/mods-enabled/sql"
+    fi
+else
+    warn "FreeRADIUS config directory $FR_DIR not found — skipping RADIUS setup."
+    warn "Install manually: sudo apt-get install freeradius freeradius-sqlite"
+fi
+
+# ----------------------------------------------------------------------------
+# Step 10 — firewall (allow 80 + 443 + RADIUS ports). Never auto-enable ufw.
+# ----------------------------------------------------------------------------
+step "10/12  Configuring firewall"
 if command -v ufw >/dev/null 2>&1; then
     ufw allow 80/tcp  >/dev/null 2>&1 || true
     ufw allow 443/tcp >/dev/null 2>&1 || true
+    ufw allow 1812/udp >/dev/null 2>&1 || true
+    ufw allow 1813/udp >/dev/null 2>&1 || true
     if ufw status 2>/dev/null | grep -qi "Status: active"; then
         ufw reload >/dev/null 2>&1 || true
-        ok "ufw active — allowed 80/tcp and 443/tcp."
+        ok "ufw active — allowed 80/tcp, 443/tcp, 1812/udp, 1813/udp."
     else
         warn "ufw is inactive; rules added but not enforced. Enable deliberately (allow SSH first): sudo ufw allow OpenSSH && sudo ufw enable"
     fi
@@ -373,9 +478,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Step 10 — validate lighttpd config, enable + restart, print checklist
+# Step 11 — validate lighttpd config, enable + restart, print checklist
 # ----------------------------------------------------------------------------
-step "10/10  Validating + starting lighttpd"
+step "11/12  Validating + starting lighttpd"
 info "lighttpd -t -f ${LIGHTTPD_MAIN}"
 if ! lighttpd -t -f "$LIGHTTPD_MAIN"; then
     die "lighttpd configuration test FAILED. Fix ${LIGHTTPD_MAIN} then re-run."
@@ -408,17 +513,23 @@ ${C_BOLD}Verification checklist${C_RESET}
        ss -tlnp | grep -E ':(80|443)\\b'
   4. php-fpm socket exists:
        ls -l ${FPM_SOCKET}
-  5. From a hotspot client, browse to:  http://${SBC_IP}/
+  5. FreeRADIUS is running (UDP 1812):
+       ss -ulnp | grep 1812
+       systemctl status freeradius
+  6. RADIUS database exists:
+       ls -la ${RADIUS_DB}
+  7. From a hotspot client, browse to:  http://${SBC_IP}/
      Admin panel:                        https://${SBC_IP}/
 
 ${C_BOLD}Deployed layout${C_RESET}
   ${PORTAL}            (portal, port 80 docroot)
   ${ADMIN}      (admin, port 443 docroot)
   ${INCLUDES}   (shared PHP core)
-  ${API}           (session.php, aliased at /api/ on port 80)
-  ${DB_DIR}/aircoins.db   (SQLite)
+  ${API}           (session.php + insertCoin.php, aliased at /api/ on port 80)
+  ${DB_DIR}/aircoins.db   (app SQLite)
+  ${DB_DIR}/radius.db     (FreeRADIUS SQLite)
   ${KEY_DIR}/secret.key   (sodium key, 0400 www-data)
   ${CERT_PEM}   (self-signed TLS)
 
-Next: configure the MikroTik redirect (see DEPLOYMENT.md, section 6).
+Next: configure the MikroTik RADIUS + redirect (see deploy/mikrotik/hotspot-external-portal.rsc).
 CHECKLIST

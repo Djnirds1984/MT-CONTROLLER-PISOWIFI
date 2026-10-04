@@ -1,32 +1,33 @@
 /*
  * ============================================================
- *  AIRCOINS NETFI — NodeMCU ESP8266 Vendo Firmware (v3)
+ *  AIRCOINS NETFI — NodeMCU ESP8266 Vendo Firmware (v4)
  * ============================================================
  *
- *  Role:  Coin-operated WiFi vending — direct MAC-based session crediting.
+ *  Role:  Coin-operated WiFi vending — SBC-hosted RADIUS crediting.
  *
- *  When a coin is inserted, the NodeMCU calls the MikroTik REST API to
- *  create or extend a hotspot user keyed by the client's MAC address
- *  (uppercase, colon-free). No voucher codes are generated.
+ *  When a coin is inserted, the NodeMCU calls the SBC API endpoint
+ *  (api/insertCoin.php) which creates or extends a RADIUS user keyed
+ *  by the client's MAC address. The MikroTik router validates the
+ *  MAC via RADIUS (FreeRADIUS + SQLite on the SBC).
  *
  *  Two operating modes:
  *    1. SETUP MODE — Creates open AP "aircoins_coinslot_setup" with
- *       captive portal at /config for WiFi + router API configuration.
+ *       captive portal at /config for WiFi + SBC API configuration.
  *       Triggered by: holding SETUP button (GPIO D3) during boot, OR
  *       first boot (no saved credentials in SPIFFS).
  *
  *    2. NORMAL MODE — Connects to configured hotspot as STA,
- *       runs coin-slot vendo logic with direct router API integration.
+ *       runs coin-slot vendo logic with SBC API integration.
  *
  *  Setup Portal (/config):
  *    - WiFi scan + select SSID + password -> saves to SPIFFS
- *    - Router API IP, port, username, password -> saves to SPIFFS
+ *    - SBC Base URL (e.g. http://10.0.0.252) -> saves to SPIFFS
  *    - "Connect & Save" -> saves all credentials, reboots to STA mode
  *
  *  Normal Mode Endpoints:
  *    GET  /status          JSON: MAC, IP, uptime, connection state
  *    GET  /getRates        Promo rates (pipe-delimited)
- *    POST /insertCoin      Insert coin for MAC — calls router REST API
+ *    POST /insertCoin      Insert coin for MAC — calls SBC API
  *      Query param: ?mac=AABBCCDDEEFF (uppercase, no colons)
  *      Response: {"status":"true","coins":N,"time_added":"15m","mac":"..."}
  *
@@ -85,8 +86,8 @@ static const uint32_t INSERT_COIN_TIMEOUT_MS = 30000;
 // SPIFFS paths
 // WiFi credentials: line 1 = SSID, line 2 = password
 static const char* CRED_FILE = "/wifi_cred.txt";
-// Router API credentials: line 1 = IP, line 2 = port, line 3 = username, line 4 = password
-static const char* ROUTER_API_FILE = "/router_api.txt";
+// SBC API base URL: line 1 = URL (e.g. http://10.0.0.252)
+static const char* SBC_API_FILE = "/sbc_api.txt";
 
 /* ============================================================
  * 2. GLOBAL STATE
@@ -101,11 +102,8 @@ bool setupMode = false;
 String savedSsid     = "";
 String savedPassword = "";
 
-// Router REST API credentials (loaded from SPIFFS)
-String routerApiIp   = "";
-int    routerApiPort = 80;
-String routerApiUser = "";
-String routerApiPass = "";
+// SBC API base URL (loaded from SPIFFS)
+String sbcApiUrl = "";
 
 // Coin acceptor state
 volatile uint16_t coinPulseCount   = 0;
@@ -115,8 +113,8 @@ uint32_t          lastPulseMs      = 0;
 // Format per line: coins#name#label#minutes#data_mb  (lines separated by \n)
 String promoRatesStr = "";
 
-// Last router API result message (for debug)
-String lastRouterResult = "";
+// Last SBC API result message (for debug)
+String lastSbcResult = "";
 
 /* ============================================================
  * 3. FORWARD DECLARATIONS
@@ -136,17 +134,16 @@ void handleGetRates();
 void handleInsertCoin();
 void handleNotFound();
 
-bool routerCreateOrExtendMacUser(const String& macNoColons, uint32_t addSeconds, String& resultMsg);
-String routerApiRequest(const String& method, const String& path, const String& body);
+bool sbcInsertCoin(const String& mac, uint16_t coins, String& resultMsg);
 
 bool loadCredentials();
 bool saveCredentials(const String& ssid, const String& password);
-bool loadRouterApiConfig();
-bool saveRouterApiConfig(const String& ip, int port, const String& user, const String& pass);
+bool loadSbcApiConfig();
+bool saveSbcApiConfig(const String& url);
 
 void blinkLed(uint8_t times);
 String jsonEscape(const String& raw);
-String parseTimeToSeconds(const String& timeStr);
+String jsonGetString(const String& json, const String& key);
 
 /* ============================================================
  * 4. JSON HELPER (no ArduinoJson dependency)
@@ -194,27 +191,24 @@ bool saveCredentials(const String& ssid, const String& password) {
   return true;
 }
 
-bool loadRouterApiConfig() {
-  if (!SPIFFS.exists(ROUTER_API_FILE)) return false;
-  File f = SPIFFS.open(ROUTER_API_FILE, "r");
+bool loadSbcApiConfig() {
+  if (!SPIFFS.exists(SBC_API_FILE)) return false;
+  File f = SPIFFS.open(SBC_API_FILE, "r");
   if (!f) return false;
-  routerApiIp   = f.readStringUntil('\n'); routerApiIp.trim();
-  String portStr = f.readStringUntil('\n'); portStr.trim();
-  routerApiUser = f.readStringUntil('\n'); routerApiUser.trim();
-  routerApiPass = f.readStringUntil('\n'); routerApiPass.trim();
+  sbcApiUrl = f.readStringUntil('\n');
+  sbcApiUrl.trim();
   f.close();
-  routerApiPort = portStr.toInt();
-  if (routerApiPort <= 0) routerApiPort = 80;
-  return routerApiIp.length() > 0;
+  // Remove trailing slash if present
+  if (sbcApiUrl.length() > 0 && sbcApiUrl.charAt(sbcApiUrl.length() - 1) == '/') {
+    sbcApiUrl = sbcApiUrl.substring(0, sbcApiUrl.length() - 1);
+  }
+  return sbcApiUrl.length() > 0;
 }
 
-bool saveRouterApiConfig(const String& ip, int port, const String& user, const String& pass) {
-  File f = SPIFFS.open(ROUTER_API_FILE, "w");
+bool saveSbcApiConfig(const String& url) {
+  File f = SPIFFS.open(SBC_API_FILE, "w");
   if (!f) return false;
-  f.println(ip);
-  f.println(String(port));
-  f.println(user);
-  f.println(pass);
+  f.println(url);
   f.close();
   return true;
 }
@@ -244,100 +238,8 @@ void blinkLed(uint8_t times) {
 }
 
 /* ============================================================
- * 8. MIKROTIK TIME PARSER
+ * 8. JSON STRING EXTRACTOR
  * ============================================================ */
-
-/**
- * Parse MikroTik time string (e.g. "1h30m", "15m", "1d") to seconds.
- */
-String parseTimeToSeconds(const String& timeStr) {
-  if (timeStr.length() == 0) return "0";
-  uint32_t total = 0;
-  uint32_t current = 0;
-  for (unsigned int i = 0; i < timeStr.length(); i++) {
-    char c = timeStr.charAt(i);
-    if (c >= '0' && c <= '9') {
-      current = current * 10 + (c - '0');
-    } else if (c == 'd') {
-      total += current * 86400; current = 0;
-    } else if (c == 'h') {
-      total += current * 3600; current = 0;
-    } else if (c == 'm') {
-      total += current * 60; current = 0;
-    } else if (c == 's') {
-      total += current; current = 0;
-    } else if (c == 'w') {
-      total += current * 604800; current = 0;
-    }
-  }
-  total += current; // remaining seconds
-  return String(total);
-}
-
-/* ============================================================
- * 9. ROUTER REST API CLIENT
- * ============================================================ */
-
-/**
- * Make an HTTP request to the MikroTik REST API.
- * Returns the response body as a string, or empty on failure.
- */
-String routerApiRequest(const String& method, const String& path, const String& body) {
-  if (routerApiIp.length() == 0) {
-    lastRouterResult = "Router API not configured";
-    return "";
-  }
-
-  String url;
-  if (routerApiPort == 443) {
-    url = "https://" + routerApiIp + ":" + String(routerApiPort) + path;
-  } else {
-    url = "http://" + routerApiIp + ":" + String(routerApiPort) + path;
-  }
-
-  HTTPClient http;
-  WiFiClient client;
-  WiFiClientSecure clientSecure;
-
-  if (routerApiPort == 443) {
-    clientSecure.setInsecure();  // Skip cert verification (self-signed)
-    http.begin(clientSecure, url);
-  } else {
-    http.begin(client, url);
-  }
-
-  // Basic auth
-  if (routerApiUser.length() > 0) {
-    http.setAuthorization(routerApiUser.c_str(), routerApiPass.c_str());
-  }
-
-  http.setTimeout(10000);  // 10s timeout
-
-  if (method == "GET") {
-    http.GET();
-  } else if (method == "PUT") {
-    http.addHeader("Content-Type", "application/json");
-    http.PUT(body);
-  } else if (method == "PATCH") {
-    http.addHeader("Content-Type", "application/json");
-    http.PATCH(body);
-  } else if (method == "DELETE") {
-    http.DELETE();
-  }
-
-  int httpCode = http.getCode();
-  String response = http.getString();
-  http.end();
-
-  if (httpCode < 200 || httpCode >= 300) {
-    lastRouterResult = "HTTP " + String(httpCode) + ": " + response;
-    Serial.printf("[router API] %s %s -> %d\n", method.c_str(), path.c_str(), httpCode);
-    Serial.println(response);
-    return "";
-  }
-
-  return response;
-}
 
 /**
  * Simple JSON string value extractor.
@@ -373,69 +275,55 @@ String jsonGetString(const String& json, const String& key) {
   }
 }
 
+/* ============================================================
+ * 9. SBC API CLIENT
+ * ============================================================ */
+
 /**
- * Create or extend a hotspot user on the MikroTik router.
- * The user is keyed by MAC (uppercase, no colons) with password = MAC.
- * If the user already exists, the limit-uptime is EXTENDED by addSeconds.
- * If not, a new user is created.
+ * Call the SBC insertCoin endpoint to create/extend a RADIUS user.
+ * POST to http://<sbcApiUrl>/api/insertCoin.php?mac=MAC&coins=N
  *
- * Returns true on success.
+ * Returns true on success, with resultMsg containing the response detail.
  */
-bool routerCreateOrExtendMacUser(const String& macNoColons, uint32_t addSeconds, String& resultMsg) {
-  String addTimeStr = String(addSeconds) + "s";
-
-  // Step 1: Check if user already exists
-  String listResponse = routerApiRequest("GET",
-    "/rest/ip/hotspot/user?name=" + macNoColons, "");
-
-  if (listResponse.length() > 2) {
-    // User exists — listResponse is a JSON array like [{"name":"...","limit-uptime":"...",".id":"*X"}]
-    // Find the .id and current limit-uptime
-    String userId = jsonGetString(listResponse, ".id");
-    String currentLimit = jsonGetString(listResponse, "limit-uptime");
-
-    if (userId.length() > 0) {
-      // Parse current limit to seconds, add new time
-      uint32_t currentSec = parseTimeToSeconds(currentLimit).toInt();
-      uint32_t newTotal = currentSec + addSeconds;
-      String newLimitStr = String(newTotal) + "s";
-
-      // PATCH to update limit-uptime
-      String patchBody = "{\"limit-uptime\":\"" + newLimitStr + "\"}";
-      String patchResp = routerApiRequest("PATCH",
-        "/rest/ip/hotspot/user/" + userId, patchBody);
-
-      if (patchResp.length() >= 0) {
-        resultMsg = "Extended by " + addTimeStr + " (total: " + String(newTotal) + "s)";
-        Serial.printf("[router] Extended user %s: %s -> %s\n",
-          macNoColons.c_str(), currentLimit.c_str(), newLimitStr.c_str());
-        return true;
-      } else {
-        resultMsg = "PATCH failed: " + lastRouterResult;
-        return false;
-      }
-    }
+bool sbcInsertCoin(const String& mac, uint16_t coins, String& resultMsg) {
+  if (sbcApiUrl.length() == 0) {
+    lastSbcResult = "SBC API not configured";
+    return false;
   }
 
-  // Step 2: User does not exist — create new
-  // Build JSON body manually (no ArduinoJson)
-  String createBody = "{";
-  createBody += "\"name\":\"" + jsonEscape(macNoColons) + "\",";
-  createBody += "\"password\":\"" + jsonEscape(macNoColons) + "\",";
-  createBody += "\"limit-uptime\":\"" + addTimeStr + "\",";
-  createBody += "\"comment\":\"vendo-coin\"";
-  createBody += "}";
+  String url = sbcApiUrl + "/api/insertCoin.php?mac=" + mac + "&coins=" + String(coins);
 
-  String createResp = routerApiRequest("PUT",
-    "/rest/ip/hotspot/user", createBody);
+  HTTPClient http;
+  WiFiClient client;
+  http.begin(client, url);
+  http.setTimeout(15000);  // 15s timeout
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-  if (createResp.length() >= 0) {
-    resultMsg = "Created with " + addTimeStr;
-    Serial.printf("[router] Created user %s with limit %s\n",
-      macNoColons.c_str(), addTimeStr.c_str());
+  int httpCode = http.POST("");
+  String response = http.getString();
+  http.end();
+
+  if (httpCode < 200 || httpCode >= 300) {
+    lastSbcResult = "HTTP " + String(httpCode) + ": " + response;
+    Serial.printf("[SBC API] POST insertCoin -> %d\n", httpCode);
+    Serial.println(response);
+    resultMsg = lastSbcResult;
+    return false;
+  }
+
+  // Parse response JSON: {"status":"true","coins":N,"time_added":"15m",...}
+  String status = jsonGetString(response, "status");
+  if (status == "true") {
+    String timeAdded = jsonGetString(response, "time_added");
+    resultMsg = "Added " + timeAdded + " via SBC RADIUS";
+    Serial.printf("[SBC] insertCoin OK: mac=%s coins=%u time=%s\n",
+      mac.c_str(), coins, timeAdded.c_str());
     return true;
   } else {
-    resultMsg = "CREATE failed: " + lastRouterResult;
+    String error = jsonGetString(response, "error");
+    resultMsg = "SBC error: " + error;
+    lastSbcResult = resultMsg;
+    Serial.printf("[SBC] insertCoin failed: %s\n", resultMsg.c_str());
     return false;
   }
 }
@@ -491,15 +379,10 @@ void handleConfigPage() {
   </div>
 
   <div class='card'>
-    <h2>2. MikroTik Router API</h2>
-    <label>Router IP Address</label>
-    <input type='text' id='routerIp' placeholder='e.g. 192.168.88.1' value='192.168.88.1'>
-    <label>Router API Port</label>
-    <input type='number' id='routerPort' placeholder='80 for HTTP, 443 for HTTPS' value='80'>
-    <label>Router Username</label>
-    <input type='text' id='routerUser' placeholder='e.g. admin' value='admin'>
-    <label>Router Password</label>
-    <input type='password' id='routerPass' placeholder='Enter router admin password'>
+    <h2>2. SBC API Configuration</h2>
+    <label>SBC Base URL</label>
+    <input type='text' id='sbcUrl' placeholder='e.g. http://10.0.0.252' value='http://10.0.0.252'>
+    <small style='color:#888'>The SBC where the portal and RADIUS server run</small>
   </div>
 
   <div class='card'>
@@ -528,21 +411,16 @@ void handleConfigPage() {
     function saveConfig(){
       var ssid=document.getElementById('ssidSelect').value,
           wifiPass=document.getElementById('wifiPass').value,
-          rIp=document.getElementById('routerIp').value.trim(),
-          rPort=document.getElementById('routerPort').value.trim(),
-          rUser=document.getElementById('routerUser').value.trim(),
-          rPass=document.getElementById('routerPass').value,
+          sbcUrl=document.getElementById('sbcUrl').value.trim(),
           b=document.getElementById('saveBtn'),
           s=document.getElementById('saveStatus');
       if(!ssid){s.style.display='block';s.className='status error';s.textContent='Please select a WiFi network';return}
-      if(!rIp){s.style.display='block';s.className='status error';s.textContent='Please enter the router IP address';return}
-      if(!rUser){s.style.display='block';s.className='status error';s.textContent='Please enter the router username';return}
+      if(!sbcUrl){s.style.display='block';s.className='status error';s.textContent='Please enter the SBC base URL';return}
       b.disabled=true;s.style.display='block';s.className='status info';
       s.innerHTML='<span class="spinner"></span> Saving credentials and connecting...';
       fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
         body:'ssid='+encodeURIComponent(ssid)+'&wifi_pass='+encodeURIComponent(wifiPass)
-          +'&router_ip='+encodeURIComponent(rIp)+'&router_port='+encodeURIComponent(rPort)
-          +'&router_user='+encodeURIComponent(rUser)+'&router_pass='+encodeURIComponent(rPass)
+          +'&sbc_url='+encodeURIComponent(sbcUrl)
       }).then(function(r){return r.json()}).then(function(d){
         if(d.success){s.className='status success';s.textContent='All saved! Rebooting to connect to '+ssid+'...';
           setTimeout(function(){alert('Device is rebooting. Close this page.')},1500);
@@ -584,22 +462,19 @@ void handleScanWiFi() {
 }
 
 /**
- * POST /save — save WiFi + router API credentials and reboot.
+ * POST /save — save WiFi + SBC API credentials and reboot.
  */
 void handleSaveCredentials() {
   String ssid     = server.arg("ssid");
   String wifiPass = server.arg("wifi_pass");
-  String rIp      = server.arg("router_ip");
-  String rPortStr = server.arg("router_port");
-  String rUser    = server.arg("router_user");
-  String rPass    = server.arg("router_pass");
+  String sbcUrl   = server.arg("sbc_url");
 
   if (ssid.length() == 0) {
     server.send(400, "application/json", "{\"success\":false,\"error\":\"SSID is required\"}");
     return;
   }
-  if (rIp.length() == 0) {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Router IP is required\"}");
+  if (sbcUrl.length() == 0) {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"SBC URL is required\"}");
     return;
   }
 
@@ -609,11 +484,9 @@ void handleSaveCredentials() {
     return;
   }
 
-  // Save router API credentials
-  int rPort = rPortStr.toInt();
-  if (rPort <= 0) rPort = 80;
-  if (!saveRouterApiConfig(rIp, rPort, rUser, rPass)) {
-    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save router API config\"}");
+  // Save SBC API URL
+  if (!saveSbcApiConfig(sbcUrl)) {
+    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save SBC API config\"}");
     return;
   }
 
@@ -665,7 +538,7 @@ void setupModeInit() {
  * ============================================================ */
 
 void handleNormalRoot() {
-  server.send(200, "text/plain", "AIRCOINS NETFI Vendo v3 OK");
+  server.send(200, "text/plain", "AIRCOINS NETFI Vendo v4 OK");
 }
 
 /**
@@ -680,7 +553,7 @@ void handleStatus() {
   json += "\"uptime_ms\":"    + String(millis()) + ",";
   json += "\"connected\":"    + String((WiFi.status() == WL_CONNECTED) ? "true" : "false") + ",";
   json += "\"setup_mode\":false,";
-  json += "\"router_api\":\"" + (routerApiIp.length() > 0 ? jsonEscape(routerApiIp) : "") + "\"";
+  json += "\"sbc_api\":\"" + (sbcApiUrl.length() > 0 ? jsonEscape(sbcApiUrl) : "") + "\"";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -692,13 +565,13 @@ void handleGetRates() {
 /**
  * POST /insertCoin?mac=AABBCCDDEEFF
  *
- * Waits for coin pulse(s), then calls the MikroTik REST API to create
- * or extend a hotspot user keyed by the client MAC.
+ * Waits for coin pulse(s), then calls the SBC API to create/extend
+ * a RADIUS user keyed by the client MAC.
  *
  * Response:
  *   {"status":"true","coins":N,"time_added":"15m","mac":"AABBCCDDEEFF"}
  *   {"status":"false","error":"no_coin"}
- *   {"status":"false","error":"router_api_failed","detail":"..."}
+ *   {"status":"false","error":"sbc_api_failed","detail":"..."}
  */
 void handleInsertCoin() {
   // Read and normalize MAC
@@ -714,9 +587,9 @@ void handleInsertCoin() {
     return;
   }
 
-  if (routerApiIp.length() == 0) {
+  if (sbcApiUrl.length() == 0) {
     server.send(500, "application/json",
-      "{\"status\":\"false\",\"error\":\"router_not_configured\"}");
+      "{\"status\":\"false\",\"error\":\"sbc_not_configured\"}");
     return;
   }
 
@@ -743,20 +616,17 @@ void handleInsertCoin() {
     return;
   }
 
-  // Calculate time to add
-  uint32_t addSeconds = (uint32_t)pulses * MINUTES_PER_PULSE * 60;
-  Serial.printf("[insertCoin] %u pulse(s) from MAC %s -> %u seconds\n",
-    pulses, mac.c_str(), addSeconds);
+  Serial.printf("[insertCoin] %u pulse(s) from MAC %s\n", pulses, mac.c_str());
 
-  // Call router REST API
+  // Call SBC API — it handles RADIUS user creation/extension
   String resultMsg = "";
-  bool ok = routerCreateOrExtendMacUser(mac, addSeconds, resultMsg);
+  bool ok = sbcInsertCoin(mac, pulses, resultMsg);
 
   if (ok) {
     blinkLed(pulses);
 
     // Format time for display
-    uint32_t addMins = addSeconds / 60;
+    uint32_t addMins = (uint32_t)pulses * MINUTES_PER_PULSE;
     String timeAdded = String(addMins) + "m";
 
     String json = "{";
@@ -770,7 +640,7 @@ void handleInsertCoin() {
   } else {
     String json = "{";
     json += "\"status\":\"false\",";
-    json += "\"error\":\"router_api_failed\",";
+    json += "\"error\":\"sbc_api_failed\",";
     json += "\"detail\":\"" + jsonEscape(resultMsg) + "\"";
     json += "}";
     server.send(200, "application/json", json);
@@ -820,8 +690,7 @@ void normalModeInit() {
 
   server.begin();
   Serial.println("HTTP server started on port " + String(HTTP_PORT));
-  Serial.printf("Router API: %s:%d (user: %s)\n",
-    routerApiIp.c_str(), routerApiPort, routerApiUser.c_str());
+  Serial.printf("SBC API: %s\n", sbcApiUrl.c_str());
   Serial.println("=== Ready ===");
 }
 
@@ -833,7 +702,7 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println();
-  Serial.println("=== AIRCOINS NETFI Vendo Firmware v3 ===");
+  Serial.println("=== AIRCOINS NETFI Vendo Firmware v4 ===");
 
   // Build promo rates string from MINUTES_PER_PULSE
   promoRatesStr = "";
@@ -867,11 +736,11 @@ void setup() {
 
   // Load saved credentials
   bool hasWifiCred = loadCredentials();
-  bool hasRouterApi = loadRouterApiConfig();
+  bool hasSbcApi = loadSbcApiConfig();
 
   Serial.printf("Setup button: %s\n", setupButtonHeld ? "HELD" : "not held");
   Serial.printf("WiFi credentials: %s\n", hasWifiCred ? "YES" : "NO");
-  Serial.printf("Router API config: %s\n", hasRouterApi ? "YES" : "NO");
+  Serial.printf("SBC API config: %s\n", hasSbcApi ? "YES" : "NO");
 
   // Enter setup mode if:
   //  - Setup button is held during boot, OR
@@ -912,11 +781,10 @@ void loop() {
   static uint32_t lastStatusMs = 0;
   if (millis() - lastStatusMs > 30000) {
     lastStatusMs = millis();
-    Serial.printf("[status] IP=%s  router=%s:%d  lastResult=%s\n",
+    Serial.printf("[status] IP=%s  sbc=%s  lastResult=%s\n",
       WiFi.localIP().toString().c_str(),
-      routerApiIp.c_str(),
-      routerApiPort,
-      lastRouterResult.c_str()
+      sbcApiUrl.c_str(),
+      lastSbcResult.c_str()
     );
   }
 

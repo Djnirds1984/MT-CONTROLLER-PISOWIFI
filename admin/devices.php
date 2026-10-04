@@ -13,6 +13,7 @@ require_once __DIR__ . '/../includes/crypto.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/RouterOS/RouterFactory.php';
+require_once __DIR__ . '/../includes/radius_db.php';
 
 $admin   = aircoins_require_login();
 $adminId = (int) $admin['id'];
@@ -177,35 +178,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $upd = $pdo->prepare('UPDATE devices SET hostname = :host, ip_address = :ip, status = :status, session_time = :st, updated_at = :now WHERE id = :id');
             $upd->execute([':host' => $hostname, ':ip' => $ip, ':status' => $status, ':st' => $sessTime, ':now' => time(), ':id' => $id]);
 
-            // Push session time to router as a hotspot user (MAC auth).
+            // Push session time to RADIUS as a MAC-auth user.
             $mac = (string) ($device['mac_address'] ?? '');
-            $routerId = (int) ($device['router_id'] ?? 0);
             $pushMsg = '';
-            if ($mac !== '' && $routerId > 0 && $sessTime !== '') {
-                $router = aircoins_get_router($pdo, $routerId);
-                if ($router) {
-                    try {
-                        $client = aircoins_router_client($router);
-                        // MAC without colons, UPPERCASE — matches what the portal
-                        // sends from $(mac) after stripping colons.
-                        $macUser = str_replace(':', '', strtoupper($mac));
-                        // List first, remove any existing user with this MAC,
-                        // then create fresh — avoids "already have user" trap.
-                        $allUsers = $client->hotspotUsers();
-                        foreach ($allUsers as $eu) {
-                            if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
-                                $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
-                                break;
-                            }
-                        }
-                        // MAC is both username and password — same as member login.
-                        $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $sessTime);
-                        $pushMsg = ' Session time pushed to router (' . $sessTime . ').';
-                    } catch (Throwable $re) {
-                        $pushMsg = ' (Router push failed: ' . $re->getMessage() . ')';
-                    }
-                } else {
-                    $pushMsg = ' (Router #' . $routerId . ' not found)';
+            if ($mac !== '' && $sessTime !== '') {
+                try {
+                    $radiusPdo = aircoins_radius_db();
+                    aircoins_radius_schema($radiusPdo);
+                    $macUser = str_replace(':', '', strtoupper($mac));
+                    $sessionSeconds = aircoins_parse_time_to_seconds($sessTime);
+                    aircoins_radius_add_user($radiusPdo, $macUser, $macUser, $sessionSeconds, 'device ' . $mac);
+                    $pushMsg = ' Session time pushed to RADIUS (' . $sessTime . ').';
+                } catch (Throwable $re) {
+                    $pushMsg = ' (RADIUS push failed: ' . $re->getMessage() . ')';
                 }
             }
 
@@ -280,48 +265,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             exit;
         }
 
-        // Find the device's router.
-        $stmt = $pdo->prepare('SELECT * FROM devices WHERE id = :id LIMIT 1');
-        $stmt->execute([':id' => $id]);
-        $device = $stmt->fetch();
-        $devRouterId = (int) ($device['router_id'] ?? 0);
-        if ($devRouterId <= 0) {
-            $devRouterId = $routerId;
-        }
-        $devRouter = $devRouterId > 0 ? aircoins_get_router($pdo, $devRouterId) : null;
-        if (!$devRouter) {
-            aircoins_flash('error', 'No router assigned to this device.');
-            header($back);
-            exit;
-        }
-
         try {
-            $client  = aircoins_router_client($devRouter);
             // MAC without colons, UPPERCASE — matches what the portal sends.
             $macUser = str_replace(':', '', strtoupper($mac));
 
-            // Calculate the new total limit.
-            // Read the current limit-uptime from the DB session_time (which
-            // was kept in sync with the router on the last edit/add_time).
-            $currentLimitSec = aircoins_parse_time_to_seconds(
-                (string) ($device['session_time'] ?? '')
-            );
-            $newLimitSec = $currentLimitSec + $addSeconds;
-            $newLimit    = aircoins_seconds_to_time($newLimitSec);
-
-            // Ensure the hotspot user exists with the correct limit-uptime.
-            // List existing users first and remove any that match this MAC
-            // (case-insensitive), then create fresh.  This avoids the
-            // "already have user" trap from RouterOS.
-            $allUsers = $client->hotspotUsers();
-            foreach ($allUsers as $eu) {
-                if (strcasecmp((string) ($eu['name'] ?? ''), $macUser) === 0) {
-                    $client->deleteHotspotUser((string) ($eu['.id'] ?? ''));
-                    break;
-                }
-            }
-            // MAC is both username and password — same as member login.
-            $client->addHotspotUser($macUser, $macUser, '', 'device ' . $mac, $newLimit);
+            // Extend the RADIUS user session by the added seconds.
+            $radiusPdo = aircoins_radius_db();
+            aircoins_radius_schema($radiusPdo);
+            $newTotalSec = aircoins_radius_extend_session($radiusPdo, $macUser, $addSeconds);
+            $newLimit = aircoins_seconds_to_time($newTotalSec);
 
             // Update DB session_time too.
             $newLimitDisplay = aircoins_seconds_to_time($addSeconds);

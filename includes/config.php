@@ -17,6 +17,11 @@ if (!defined('AIRCOINS_DB')) {
     define('AIRCOINS_DB', '/var/lib/aircoins/aircoins.db');
 }
 
+/** Absolute path to the FreeRADIUS SQLite database file. */
+if (!defined('AIRCOINS_RADIUS_DB')) {
+    define('AIRCOINS_RADIUS_DB', '/var/lib/aircoins/radius.db');
+}
+
 /** Absolute path to the 32-byte libsodium secretbox key file. */
 if (!defined('AIRCOINS_KEY')) {
     define('AIRCOINS_KEY', '/etc/aircoins/secret.key');

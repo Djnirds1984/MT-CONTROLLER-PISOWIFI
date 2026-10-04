@@ -15,6 +15,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/radius_db.php';
 require_once __DIR__ . '/../includes/crypto.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/layout.php';
@@ -80,45 +81,51 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     $back   = 'Location: hotspot.php';
 
-    if (!$router) {
-        aircoins_flash('error', 'Select a router first.');
-        header('Location: hotspot.php');
-        exit;
-    }
+    // User management actions use RADIUS DB (no router needed).
+    $userActions = ['add_user', 'delete_user', 'generate'];
+    $needsRouter = ['kick', 'add_profile', 'delete_profile'];
+    $isUserAction = in_array($action, $userActions, true);
 
-    // Open a client once for the mutating actions.
+    // Router is needed for sessions and profiles.
     $client = null;
     $clientErr = '';
-    try {
-        $client = aircoins_router_client($router);
-    } catch (Throwable $e) {
-        $clientErr = $e->getMessage();
+    if (in_array($action, $needsRouter, true)) {
+        if (!$router) {
+            aircoins_flash('error', 'Select a router first.');
+            header('Location: hotspot.php');
+            exit;
+        }
+        try {
+            $client = aircoins_router_client($router);
+        } catch (Throwable $e) {
+            $clientErr = $e->getMessage();
+        }
+        if ($client === null) {
+            aircoins_flash('error', 'Cannot reach “' . $router['name'] . '”: ' . $clientErr);
+            header($back);
+            exit;
+        }
     }
 
-    if ($client === null) {
-        aircoins_flash('error', 'Cannot reach “' . $router['name'] . '”: ' . $clientErr);
-        header($back);
-        exit;
-    }
-
-    // ---- add single user ---------------------------------------------------
+    // ---- add single user (RADIUS DB) ----------------------------------------
     if ($action === 'add_user') {
-        $name        = trim((string) ($_POST['name'] ?? ''));
-        $pass        = (string) ($_POST['password'] ?? '');
-        $profile     = trim((string) ($_POST['profile'] ?? ''));
-        $comment     = trim((string) ($_POST['comment'] ?? ''));
-        $uptimeMin   = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
-        $uptimeLimit = aircoins_minutes_to_time($uptimeMin);
-        if ($name === '' || $pass === '') {
-            aircoins_flash('error', 'Username and password are required.');
+        $name           = trim((string) ($_POST['name'] ?? ''));
+        $pass           = (string) ($_POST['password'] ?? '');
+        $comment        = trim((string) ($_POST['comment'] ?? ''));
+        $uptimeMin      = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
+        $sessionSeconds = $uptimeMin * 60;
+        if ($name === '') {
+            aircoins_flash('error', 'Username is required.');
         } else {
             try {
-                $client->addHotspotUser($name, $pass, $profile, $comment, $uptimeLimit);
-                $msg = 'Hotspot user “' . $name . '” created';
-                if ($uptimeLimit !== '') {
-                    $msg .= ' (session limit ' . $uptimeLimit . ')';
+                $radiusPdo = aircoins_radius_db();
+                aircoins_radius_schema($radiusPdo);
+                aircoins_radius_add_user($radiusPdo, $name, $pass, $sessionSeconds, $comment);
+                $msg = 'RADIUS user “' . $name . '” created';
+                if ($sessionSeconds > 0) {
+                    $msg .= ' (session limit ' . $sessionSeconds . 's)';
                 }
-                aircoins_audit($pdo, $adminId, 'hotspot_user_add', 'router #' . $routerId . ' user ' . $name . ($uptimeLimit !== '' ? ' uptime=' . $uptimeLimit : ''));
+                aircoins_audit($pdo, $adminId, 'radius_user_add', 'user ' . $name . ($sessionSeconds > 0 ? ' session=' . $sessionSeconds . 's' : ''));
                 aircoins_flash('success', $msg . '.');
             } catch (Throwable $e) {
                 aircoins_flash('error', 'Add user failed: ' . $e->getMessage());
@@ -128,17 +135,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
-    // ---- delete user -------------------------------------------------------
+    // ---- delete user (RADIUS DB) -------------------------------------------
     if ($action === 'delete_user') {
-        $id   = (string) ($_POST['id'] ?? '');
         $name = (string) ($_POST['name'] ?? '');
-        if ($id === '') {
-            aircoins_flash('error', 'Missing user id.');
+        if ($name === '') {
+            aircoins_flash('error', 'Missing username.');
         } else {
             try {
-                $client->deleteHotspotUser($id);
-                aircoins_audit($pdo, $adminId, 'hotspot_user_delete', 'router #' . $routerId . ' user ' . ($name !== '' ? $name : $id));
-                aircoins_flash('success', 'User “' . ($name !== '' ? $name : $id) . '” deleted.');
+                $radiusPdo = aircoins_radius_db();
+                aircoins_radius_schema($radiusPdo);
+                aircoins_radius_remove_user($radiusPdo, $name);
+                aircoins_audit($pdo, $adminId, 'radius_user_delete', 'user ' . $name);
+                aircoins_flash('success', 'User “' . $name . '” deleted.');
             } catch (Throwable $e) {
                 aircoins_flash('error', 'Delete failed: ' . $e->getMessage());
             }
@@ -147,24 +155,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
-    // ---- bulk voucher generator -------------------------------------------
+    // ---- bulk voucher generator (RADIUS DB) --------------------------------
     if ($action === 'generate') {
-        $prefix      = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['prefix'] ?? 'AIR')) ?: 'AIR');
-        $count       = max(1, min(200, (int) ($_POST['count'] ?? 1)));
-        $len         = max(4, min(12, (int) ($_POST['code_len'] ?? 6)));
-        $profile     = trim((string) ($_POST['profile'] ?? ''));
-        $comment     = trim((string) ($_POST['comment'] ?? '')) ?: ('voucher batch ' . date('Y-m-d H:i'));
-        $uptimeMin   = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
-        $uptimeLimit = aircoins_minutes_to_time($uptimeMin);
+        $prefix         = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['prefix'] ?? 'AIR')) ?: 'AIR');
+        $count          = max(1, min(200, (int) ($_POST['count'] ?? 1)));
+        $len            = max(4, min(12, (int) ($_POST['code_len'] ?? 6)));
+        $comment        = trim((string) ($_POST['comment'] ?? '')) ?: ('voucher batch ' . date('Y-m-d H:i'));
+        $uptimeMin      = max(0, (int) ($_POST['uptime_minutes'] ?? 0));
+        $sessionSeconds = $uptimeMin * 60;
 
         $created = [];
         $failed  = [];
+        try {
+            $radiusPdo = aircoins_radius_db();
+            aircoins_radius_schema($radiusPdo);
+        } catch (Throwable $e) {
+            aircoins_flash('error', 'RADIUS DB unavailable: ' . $e->getMessage());
+            header($back . '#users');
+            exit;
+        }
+
         for ($i = 0; $i < $count; $i++) {
             $code = aircoins_voucher_code($prefix, $len);
             try {
                 // Voucher with EMPTY password — the portal sends the code as
                 // plaintext username only (no password field on the voucher input).
-                $client->addHotspotUser($code, '', $profile, $comment, $uptimeLimit);
+                aircoins_radius_add_user($radiusPdo, $code, '', $sessionSeconds, $comment);
                 $created[] = $code;
                 // Track voucher in voucher_log (unused until first login).
                 try {
@@ -172,11 +188,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $expTs = $uptimeMin > 0 ? time() + ($uptimeMin * 60) : null;
                     $vIns->execute([':code' => $code, ':rid' => $routerId, ':exp' => $expTs]);
                 } catch (Throwable $ve) {
-                    // Non-fatal: voucher was created on router even if logging fails.
+                    // Non-fatal: voucher was created in RADIUS even if logging fails.
                 }
             } catch (Throwable $e) {
                 $failed[] = $code . ' (' . $e->getMessage() . ')';
-                // Abort early if the very first fails (likely profile/permission).
                 if ($created === [] && $i === 0) {
                     break;
                 }
@@ -186,12 +201,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $_SESSION['aircoins_vouchers'] = [
             'created'      => $created,
             'failed'       => $failed,
-            'profile'      => $profile,
-            'router'       => (string) $router['name'],
-            'uptime_limit' => $uptimeLimit,
+            'router'       => 'RADIUS',
+            'uptime_limit' => $sessionSeconds > 0 ? $sessionSeconds . 's' : '',
         ];
-        aircoins_audit($pdo, $adminId, 'hotspot_voucher_generate',
-            'router #' . $routerId . ' generated ' . count($created) . '/' . $count . ' vouchers (profile ' . ($profile !== '' ? $profile : 'default') . ($uptimeLimit !== '' ? ', uptime=' . $uptimeLimit : '') . ')');
+        aircoins_audit($pdo, $adminId, 'radius_voucher_generate',
+            'generated ' . count($created) . '/' . $count . ' vouchers in RADIUS' . ($sessionSeconds > 0 ? ' (session=' . $sessionSeconds . 's)' : ''));
         if ($created === []) {
             aircoins_flash('error', 'No vouchers created' . ($failed !== [] ? ': ' . $failed[0] : '.'));
         } else {
@@ -284,14 +298,23 @@ $banner = '';
 $bannerType = 'error';
 $client = null;
 
+// Load RADIUS users (always, no router needed)
+try {
+    $radiusPdo = aircoins_radius_db();
+    aircoins_radius_schema($radiusPdo);
+    $users = aircoins_radius_list_users($radiusPdo);
+} catch (Throwable $e) {
+    $banner = 'Could not load RADIUS users: ' . $e->getMessage();
+}
+
+// Load sessions and profiles from router (still router-managed)
 if ($router) {
     try {
         $client = aircoins_router_client($router);
-        try { $users = $client->hotspotUsers(); } catch (Throwable $e) { $users = []; $banner = 'Could not load hotspot users: ' . $e->getMessage(); }
         try { $sessions = $client->activeSessions(); } catch (Throwable $e) { $sessions = []; if ($banner === '') { $banner = 'Could not load active sessions: ' . $e->getMessage(); } }
         try { $profiles = $client->hotspotProfiles(); } catch (Throwable $e) { $profiles = []; if ($banner === '') { $banner = 'Could not load hotspot profiles: ' . $e->getMessage(); } }
     } catch (Throwable $e) {
-        $banner = 'Cannot reach router "' . (string) $router['name'] . '": ' . $e->getMessage();
+        if ($banner === '') { $banner = 'Cannot reach router "' . (string) $router['name'] . '": ' . $e->getMessage(); }
     }
 }
 
@@ -366,9 +389,9 @@ aircoins_header('Hotspot', 'hotspot');
     <?php endif; ?>
 
     <div class="grid grid--2" style="margin-bottom:20px;align-items:start">
-      <!-- add single user -->
+      <!-- add single user (RADIUS) -->
       <div class="card">
-        <div class="card__head"><h2 class="card__title">Add user</h2></div>
+        <div class="card__head"><h2 class="card__title">Add RADIUS user</h2></div>
         <div class="card__body">
           <form method="post" action="hotspot.php" autocomplete="off">
             <?php echo csrf_field(); ?>
@@ -379,21 +402,12 @@ aircoins_header('Hotspot', 'hotspot');
             </div>
             <div class="field">
               <label for="u-pass">Password</label>
-              <input class="input" id="u-pass" name="password" type="text" required>
-            </div>
-            <div class="field">
-              <label for="u-profile">Profile</label>
-              <select class="select" id="u-profile" name="profile">
-                <?php if ($profiles === []): ?><option value="default">default</option><?php endif; ?>
-                <?php foreach ($profiles as $p): ?>
-                  <option value="<?php echo e((string) $p['name']); ?>"><?php echo e((string) $p['name']); ?></option>
-                <?php endforeach; ?>
-              </select>
+              <input class="input" id="u-pass" name="password" type="text" placeholder="leave empty for voucher-only">
             </div>
             <div class="field">
               <label for="u-uptime">Session time</label>
               <select class="select" id="u-uptime" name="uptime_minutes">
-                <option value="0">No limit (use profile)</option>
+                <option value="0">No limit</option>
                 <option value="10">10 minutes</option>
                 <option value="15">15 minutes</option>
                 <option value="30">30 minutes</option>
@@ -415,7 +429,7 @@ aircoins_header('Hotspot', 'hotspot');
         </div>
       </div>
 
-      <!-- bulk voucher generator -->
+      <!-- bulk voucher generator (RADIUS) -->
       <div class="card">
         <div class="card__head"><h2 class="card__title">Bulk voucher generator</h2></div>
         <div class="card__body">
@@ -437,20 +451,11 @@ aircoins_header('Hotspot', 'hotspot');
                 <label for="v-len">Code length</label>
                 <input class="input input--mono" id="v-len" name="code_len" type="number" min="4" max="12" value="6">
               </div>
-              <div class="field">
-                <label for="v-profile">Profile</label>
-                <select class="select" id="v-profile" name="profile">
-                  <?php if ($profiles === []): ?><option value="default">default</option><?php endif; ?>
-                  <?php foreach ($profiles as $p): ?>
-                    <option value="<?php echo e((string) $p['name']); ?>"><?php echo e((string) $p['name']); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </div>
             </div>
             <div class="field">
               <label for="v-uptime">Session time</label>
               <select class="select" id="v-uptime" name="uptime_minutes">
-                <option value="0">No limit (use profile)</option>
+                <option value="0">No limit</option>
                 <option value="10">10 minutes</option>
                 <option value="15">15 minutes</option>
                 <option value="30">30 minutes</option>
@@ -467,39 +472,41 @@ aircoins_header('Hotspot', 'hotspot');
               <label for="v-comment">Comment</label>
               <input class="input" id="v-comment" name="comment" type="text" placeholder="voucher batch">
             </div>
-            <p class="hint">Format: <code data-voucher-preview>AIRXXXXXX</code> — each code is used as both username and password. Session time is set as the uptime-limit on the MikroTik user.</p>
+            <p class="hint">Format: <code data-voucher-preview>AIRXXXXXX</code> — each code is used as the username with an empty password. Stored in the RADIUS database.</p>
             <button class="btn btn--primary btn--block" type="submit"
-                    data-confirm="Generate and push these vouchers to the router now?">Generate vouchers</button>
+                    data-confirm="Generate these vouchers in the RADIUS database now?">Generate vouchers</button>
           </form>
         </div>
       </div>
     </div>
 
-    <!-- users table -->
+    <!-- RADIUS users table -->
     <div class="card">
       <div class="card__head">
-        <h2 class="card__title">Hotspot users</h2>
+        <h2 class="card__title">RADIUS users</h2>
         <div class="spacer"></div>
         <span class="hint"><?php echo count($users); ?> user(s)</span>
       </div>
       <div class="card__body card__body--flush">
         <?php if ($users === []): ?>
-          <div class="empty">No hotspot users found</div>
+          <div class="empty">No RADIUS users found</div>
         <?php else: ?>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>.id</th><th>Name</th><th>Profile</th><th>Session Limit</th><th>Comment</th><th>Voucher</th><th>State</th><th class="actions">Actions</th></tr></thead>
+              <thead><tr><th>Username</th><th>Password</th><th>Session Timeout</th><th>Comment</th><th>Voucher</th><th class="actions">Actions</th></tr></thead>
               <tbody>
               <?php foreach ($users as $u): ?>
                 <tr>
-                  <td class="mono"><?php echo e((string) ($u['.id'] ?? '')); ?></td>
-                  <td><strong><?php echo e((string) ($u['name'] ?? '')); ?></strong></td>
-                  <td><?php echo e((string) ($u['profile'] ?? '')); ?></td>
-                  <td class="mono"><?php echo e((string) ($u['limit-uptime'] ?? '')); ?></td>
+                  <td><strong><?php echo e((string) ($u['username'] ?? '')); ?></strong></td>
+                  <td class="mono"><?php echo e((string) ($u['password'] ?? '')); ?></td>
+                  <td class="mono"><?php
+                    $timeout = (int) ($u['session_timeout'] ?? 0);
+                    echo $timeout > 0 ? e((string) $timeout) . 's' : '<span class="hint">no limit</span>';
+                  ?></td>
                   <td class="hint"><?php echo e((string) ($u['comment'] ?? '')); ?></td>
                   <td>
                     <?php
-                    $uName = (string) ($u['name'] ?? '');
+                    $uName = (string) ($u['username'] ?? '');
                     $vInfo = $voucherStatus[$uName] ?? null;
                     if ($vInfo !== null && !empty($vInfo['used_at'])):
                     ?>
@@ -510,21 +517,13 @@ aircoins_header('Hotspot', 'hotspot');
                       <span class="hint">—</span>
                     <?php endif; ?>
                   </td>
-                  <td>
-                    <?php if (!empty($u['disabled'])): ?>
-                      <span class="badge badge--off">DISABLED</span>
-                    <?php else: ?>
-                      <span class="badge badge--online">ACTIVE</span>
-                    <?php endif; ?>
-                  </td>
                   <td class="actions">
                     <form method="post" action="hotspot.php" style="display:inline">
                       <?php echo csrf_field(); ?>
                       <input type="hidden" name="action" value="delete_user">
-                      <input type="hidden" name="id" value="<?php echo e((string) ($u['.id'] ?? '')); ?>">
-                      <input type="hidden" name="name" value="<?php echo e((string) ($u['name'] ?? '')); ?>">
+                      <input type="hidden" name="name" value="<?php echo e((string) ($u['username'] ?? '')); ?>">
                       <button class="btn btn--danger btn--sm" type="submit"
-                              data-confirm="Delete hotspot user “<?php echo e((string) ($u['name'] ?? '')); ?>”?">Delete</button>
+                              data-confirm="Delete RADIUS user “<?php echo e((string) ($u['username'] ?? '')); ?>”?">Delete</button>
                     </form>
                   </td>
                 </tr>

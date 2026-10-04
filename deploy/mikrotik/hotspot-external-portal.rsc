@@ -120,7 +120,7 @@
 
 
 # ----------------------------------------------------------------------------
-# SECTION 3 — Hotspot profile (HTTP-PAP + cookie)
+# SECTION 3 — Hotspot profile (HTTP-PAP + cookie + RADIUS)
 # ----------------------------------------------------------------------------
 # login-by=http-pap,cookie :
 #   * http-pap  -> the SBC login form POSTs the voucher in PLAINTEXT over HTTP.
@@ -128,13 +128,16 @@
 #                  is generated per-request by the router, so PAP is required.
 #   * cookie    -> keeps the client authenticated across the browser session via
 #                  the hotspot HTTP cookie (no repeated logins on the same device).
+# use-radius=yes -> the router sends RADIUS Access-Request to the SBC for
+#                  authentication instead of checking local hotspot users.
+#                  FreeRADIUS on the SBC validates credentials against SQLite.
 # dns-name        -> the hostname clients are redirected to / that resolves to the
 #                    SBC (static entry added in section 9).
 # hotspot-address -> the router address the hotspot answers on ($gwIP).
 # http-cookie-lifetime=1d -> cookie validity.
 /ip hotspot profile add name=$hsProfile login-by=http-pap,cookie \
     dns-name=$dnsName hotspot-address=$gwIP http-cookie-lifetime=1d \
-    html-directory=hotspot use-radius=no comment="AIRCOINS external portal profile"
+    html-directory=hotspot use-radius=yes comment="AIRCOINS external portal profile"
 
 
 # ----------------------------------------------------------------------------
@@ -154,11 +157,34 @@
 /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=80 \
     protocol=tcp comment="AIRCOINS SBC portal"
 
+# Allow RADIUS traffic (UDP 1812/1813) from router to SBC if needed.
+# Normally this is on the same subnet and doesn't need a walled-garden rule,
+# but if the SBC is on a different subnet, uncomment the following:
+# /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=1812 \
+#     protocol=udp comment="AIRCOINS RADIUS auth"
+# /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=1813 \
+#     protocol=udp comment="AIRCOINS RADIUS accounting"
+
 # Optional: also allow the SBC admin panel over HTTPS (443) from the walled
 # garden IF admins browse it from the hotspot side. Usually NOT needed because
 # admin traffic comes from the management network — uncomment only if required.
 # /ip hotspot walled-garden ip add action=accept dst-address=$sbcIP dst-port=443 \
 #     protocol=tcp comment="AIRCOINS SBC admin (HTTPS)"
+
+
+# ----------------------------------------------------------------------------
+# SECTION 5b — RADIUS server configuration
+# ----------------------------------------------------------------------------
+# Point the router's RADIUS client at the SBC where FreeRADIUS runs.
+# The shared secret must match /etc/freeradius/3.0/clients.conf on the SBC.
+# Service=hotspot means this RADIUS server is used for hotspot authentication.
+:local radiusSecret "aircoins_secret"
+/radius add service=hotspot address=$sbcIP secret=$radiusSecret \
+    timeout=3s authentication-port=1812 accounting-port=1813 \
+    comment="AIRCOINS SBC FreeRADIUS"
+
+# Enable RADIUS accounting for hotspot users so the SBC can track sessions.
+/ip hotspot user profile set default use-radius=yes
 
 
 # ----------------------------------------------------------------------------
