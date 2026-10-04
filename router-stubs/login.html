@@ -1,32 +1,14 @@
 <!DOCTYPE html>
-<!--
-  AIRCOINS NETFI — Router-side LOGIN STUB (served by MikroTik /hotspot/login.html)
-
-  IMPORTANT: Replace 192.168.88.10 with your SBC panel IP.
-  The SBC IP appears in two places below (the <meta http-equiv="refresh"> URL and
-  the JavaScript location.replace() URL). Keep them identical.
-
-  Because the ROUTER serves this file, all $(var) tokens ARE substituted by
-  RouterOS before the browser receives it. The -esc variants are used inside the
-  URL/query string so special characters are properly encoded.
-
-  The marker comment below MUST remain: RouterOS treats a page as the "real"
-  login page only when it detects this token. Do NOT remove it.
--->
 <!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE -->
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AIRCOINS NETFI — Connecting…</title>
-<!-- Meta refresh forward to the SBC captive portal (primary redirect path) -->
-<meta http-equiv="refresh" content="0; url=http://192.168.88.10/login.html?mac=$(mac-esc)&ip=$(ip-esc)&dst=$(link-orig-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)&user=$(username-esc)&err=$(error-esc)">
-<!-- JavaScript fallback for clients that ignore meta refresh -->
+<meta http-equiv="refresh" content="0; url=http://10.0.0.252/login.html?mac=$(mac-esc)&ip=$(ip-esc)&dst=$(link-orig-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)&user=$(username-esc)&err=$(error-esc)">
 <script>
-  location.replace("http://192.168.88.10/login.html?mac=$(mac-esc)&ip=$(ip-esc)&dst=$(link-orig-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)&user=$(username-esc)&err=$(error-esc)");
+  location.replace("http://10.0.0.252/login.html?mac=$(mac-esc)&ip=$(ip-esc)&dst=$(link-orig-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)&user=$(username-esc)&err=$(error-esc)");
 </script>
 </head>
-<body>
-Redirecting to AIRCOINS NETFI portal...
-</body>
+<body>Redirecting to AIRCOINS NETFI portal...</body>
 </html>

@@ -1,26 +1,13 @@
 <!DOCTYPE html>
-<!--
-  AIRCOINS NETFI — Router-side LOGOUT STUB (served by MikroTik /hotspot/logout.html)
-
-  RouterOS renders this page right after a hotspot user is logged out (session
-  paused/expired, PAUSE button hit, or forced logout). Because the ROUTER serves
-  it, $(var) tokens ARE substituted. We forward the user to the SBC portal login
-  page so the panel can show its DISCONNECTED state and offer a re-login.
-
-  Replace 192.168.88.10 with your SBC panel IP.
--->
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AIRCOINS NETFI — Disconnected</title>
-<!-- Forward to the SBC login page (DISCONNECTED state), passing client context -->
-<meta http-equiv="refresh" content="0; url=http://192.168.88.10/login.html?mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)">
+<meta http-equiv="refresh" content="0; url=http://10.0.0.252/login.html?mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)">
 <script>
-  location.replace("http://192.168.88.10/login.html?mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)");
+  location.replace("http://10.0.0.252/login.html?mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)&logout=$(link-logout-esc)");
 </script>
 </head>
-<body>
-You have been disconnected. Redirecting to the AIRCOINS NETFI portal...
-</body>
+<body>You have been disconnected. Redirecting to the AIRCOINS NETFI portal...</body>
 </html>

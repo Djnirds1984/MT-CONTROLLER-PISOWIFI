@@ -422,17 +422,18 @@ if [ -d "$FR_DIR" ]; then
     if [ -f "$CLIENTS_CONF" ]; then
         # Add our MikroTik client if not already present
         if ! grep -q "AIRCOINS" "$CLIENTS_CONF" 2>/dev/null; then
-            # Default MikroTik IP from the .rsc script; operator should edit to match
+            # Default MikroTik IP; operator MUST edit to match their router (e.g. 10.0.0.1)
             cat >> "$CLIENTS_CONF" <<'CLIENTEOF'
 
 # AIRCOINS NETFI — MikroTik router RADIUS client
+# IMPORTANT: Change ipaddr below to your router's actual LAN IP
 client router {
-    ipaddr = 192.168.88.1
+    ipaddr = 10.0.0.1
     secret = aircoins_secret
     nastype = other
 }
 CLIENTEOF
-            ok "Added MikroTik RADIUS client to clients.conf (edit ipaddr to match your router)."
+            ok "Added MikroTik RADIUS client to clients.conf. EDIT ipaddr if your router is NOT 10.0.0.1."
         else
             info "AIRCOINS RADIUS client already in clients.conf — keeping it."
         fi

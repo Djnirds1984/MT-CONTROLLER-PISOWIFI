@@ -1,26 +1,13 @@
 <!DOCTYPE html>
-<!--
-  AIRCOINS NETFI — Router-side ERROR STUB (served by MikroTik /hotspot/error.html)
-
-  RouterOS renders this page when a hotspot login fails (bad voucher, expired
-  session, invalid credentials, etc.). Because the ROUTER serves it, $(var)
-  tokens ARE substituted. We bounce the user straight back to the SBC portal
-  login page, carrying the error string so the panel can display it.
-
-  Replace 192.168.88.10 with your SBC panel IP.
--->
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AIRCOINS NETFI — Login error</title>
-<!-- Forward back to the SBC login page, passing the error + client context -->
-<meta http-equiv="refresh" content="0; url=http://192.168.88.10/login.html?err=$(error-esc)&mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)">
+<meta http-equiv="refresh" content="0; url=http://10.0.0.252/login.html?err=$(error-esc)&mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)">
 <script>
-  location.replace("http://192.168.88.10/login.html?err=$(error-esc)&mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)");
+  location.replace("http://10.0.0.252/login.html?err=$(error-esc)&mac=$(mac-esc)&ip=$(ip-esc)&login=$(link-login-only-esc)");
 </script>
 </head>
-<body>
-Login error. Redirecting back to the AIRCOINS NETFI portal...
-</body>
+<body>Login error. Redirecting back to the AIRCOINS NETFI portal...</body>
 </html>
