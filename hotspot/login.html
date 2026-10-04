@@ -61,7 +61,6 @@
     <div class="piso-actions">
         <button class="piso-btn piso-btn-coin" id="insertBtn">INSERT COIN</button>
         <button class="piso-btn piso-btn-secondary" id="promoRateBtn">VIEW RATES</button>
-        <button class="piso-btn piso-btn-secondary" id="generateVoucherBtn">GET FREE VOUCHER</button>
     </div>
 
     <hr class="piso-divider">
@@ -114,25 +113,20 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Insert Coin</h5>
-                <button type="button" class="close" data-dismiss="modal" onclick="doCancelTopUp()"><span>&times;</span></button>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
                 <div class="piso-coin-display">
                     <div class="piso-coin-amount" id="totalCoin">0</div>
                     <div class="piso-coin-label">Coins Inserted</div>
-                    <div class="piso-coin-time" id="totalTime">0 min</div>
+                    <div class="piso-coin-time" id="totalTime">Waiting for coin...</div>
                 </div>
                 <div class="piso-coin-anim">
                     <img src="assets/insert-coin-animation.gif" alt="Insert Coin">
                 </div>
-                <div class="piso-voucher-code" id="codeGenerated" style="display:none;">
-                    <span id="voucherCodeText"></span>
-                </div>
-                <input type="hidden" id="expectedCoin" value="0">
             </div>
             <div class="modal-footer">
-                <button class="piso-btn piso-btn-secondary" id="cancelTopUpBtn" style="flex:1;">CANCEL</button>
-                <button class="piso-btn piso-btn-success" id="convertVoucherCode" style="flex:1;display:none;">USE VOUCHER</button>
+                <button class="piso-btn piso-btn-secondary" id="cancelTopUpBtn" style="flex:1;" data-dismiss="modal">CANCEL</button>
             </div>
         </div>
     </div>

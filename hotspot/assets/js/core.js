@@ -15,8 +15,7 @@
     // ── State ───────────────────────────────────────────────────────────────
     var currentVendoIp    = "";
     var minutesPerPulse   = 15;
-    var coinPollTimer     = null;
-    var expectedCoins     = 0;
+    var insertCoinXhr     = null;
     var sessionPollTimer  = null;
 
     // ── Helper: get portal params (set by login.html init script) ───────────
@@ -190,10 +189,20 @@
         }
     }
 
-    // ── Insert Coin flow ────────────────────────────────────────────────────
+    // ── Insert Coin flow (MAC-based session crediting) ────────────────────
+    // Single POST to /insertCoin?mac=MAC — firmware waits for coin pulse,
+    // then calls MikroTik REST API to create/extend hotspot user keyed by MAC.
+    // On success, auto-login with MAC credentials.
     function doInsertCoin() {
         if (!currentVendoIp) {
             showToast("Please select a coin slot first.", "warning");
+            return;
+        }
+
+        // Get client MAC from portal params, normalize uppercase no-colons
+        var mac = (getParams().mac || "").toUpperCase().replace(/:/g, "").replace(/-/g, "").replace(/\./g, "");
+        if (!mac || mac.length !== 12) {
+            showToast("Client MAC address not available.", "danger");
             return;
         }
 
@@ -202,116 +211,74 @@
 
         // Reset modal display
         $("#totalCoin").text("0");
-        $("#totalTime").text("0 min");
-        $("#expectedCoin").val("0");
-        $("#voucherCodeText").text("");
-        $("#codeGenerated").hide();
-        $("#convertVoucherCode").hide();
-        expectedCoins = 0;
+        $("#totalTime").text("Waiting...");
 
         // Show the insert-coin modal
         $("#insertCoinModal").modal("show");
 
-        // Poll the vendo device for coin insertion
-        startCoinPoll();
-    }
-
-    function startCoinPoll() {
-        if (coinPollTimer) clearInterval(coinPollTimer);
-
-        coinPollTimer = setInterval(function () {
-            $.ajax({
-                url: "http://" + currentVendoIp + "/checkCoin",
-                method: "POST",
-                data: {},
-                timeout: 5000
-            }).done(function (resp) {
-                if (resp && resp.status === "true") {
-                    // Coin accepted
-                    var total   = parseInt(resp.totalCoin) || 0;
-                    var added   = parseInt(resp.newCoin) || 0;
-                    var voucher = resp.voucher || "";
-                    var secs    = parseInt(resp.timeAdded) || 0;
-                    var mins    = Math.round(secs / 60);
-
-                    expectedCoins = total;
-                    $("#totalCoin").text(total);
-                    $("#totalTime").text(mins + " min");
-                    $("#expectedCoin").text(total);
-
-                    if (voucher) {
-                        $("#voucherCodeText").text(voucher);
-                        $("#codeGenerated").show();
-                        $("#convertVoucherCode").show();
-                        stopCoinPoll();
-                        showToast("Voucher generated: " + voucher, "success");
-                    }
-                }
-                // status "false" with errorCode "coin.not.inserted" = no coin yet, keep polling
-            }).fail(function () {
-                // Device unreachable — keep polling silently
-            });
-        }, 1500);
-    }
-
-    function stopCoinPoll() {
-        if (coinPollTimer) {
-            clearInterval(coinPollTimer);
-            coinPollTimer = null;
-        }
-        var $btn = $("#insertBtn");
-        $btn.prop("disabled", false).text("INSERT COIN");
-    }
-
-    // ── Cancel top-up ───────────────────────────────────────────────────────
-    function doCancelTopUp() {
-        if (!currentVendoIp) return;
-
-        $.ajax({
-            url: "http://" + currentVendoIp + "/cancelTopUp",
+        // Single POST to firmware — it waits for coin, then credits session on router
+        insertCoinXhr = $.ajax({
+            url: "http://" + currentVendoIp + "/insertCoin?mac=" + mac,
             method: "POST",
-            timeout: 3000
+            timeout: 35000  // firmware timeout is 30s, give 5s buffer
+        }).done(function (resp) {
+            if (resp && resp.status === "true") {
+                var coins = parseInt(resp.coins) || 0;
+                var timeAdded = resp.time_added || "";
+
+                $("#totalCoin").text(coins);
+                $("#totalTime").text(timeAdded);
+
+                showToast("Coin accepted! " + timeAdded + " added.", "success");
+
+                // Auto-login with MAC credentials
+                setTimeout(function () {
+                    $("#insertCoinModal").modal("hide");
+                    doMacLogin(mac);
+                }, 800);
+            } else {
+                var errMsg = (resp && resp.error) ? resp.error : "unknown";
+                if (errMsg === "no_coin") {
+                    showToast("No coin detected. Try again.", "warning");
+                } else if (errMsg === "router_api_failed") {
+                    showToast("Session credit failed: " + (resp.detail || ""), "danger");
+                } else {
+                    showToast("Coin insert failed: " + errMsg, "danger");
+                }
+            }
+        }).fail(function (xhr, status) {
+            if (status === "abort") return;  // User cancelled
+            showToast("Vendo device unreachable.", "danger");
         }).always(function () {
-            stopCoinPoll();
-            $("#insertCoinModal").modal("hide");
+            insertCoinXhr = null;
+            $btn.prop("disabled", false).text("INSERT COIN");
         });
     }
 
-    // ── Convert voucher (use generated code to login) ───────────────────────
-    function doConvertVoucher() {
-        var code = $("#voucherCodeText").text().trim();
-        if (!code) return;
-
-        $("#voucherInput").val(code);
-        $("#insertCoinModal").modal("hide");
-        stopCoinPoll();
-
-        // Auto-submit
-        doLogin(code);
-    }
-
-    // ── Generate voucher (no coin, just a code) ────────────────────────────
-    function doGenerateVoucher() {
-        if (!currentVendoIp) {
-            showToast("Please select a coin slot first.", "warning");
+    // ── MAC-based auto-login (HTTP-PAP) ───────────────────────────────────
+    // After coin acceptance, log in using MAC as both username and password.
+    function doMacLogin(macClean) {
+        var loginUrl = getParams().login || "";
+        if (!loginUrl) {
+            showToast("No login URL available.", "danger");
             return;
         }
 
-        $.ajax({
-            url: "http://" + currentVendoIp + "/generateVoucher",
-            method: "POST",
-            timeout: 5000
-        }).done(function (resp) {
-            if (resp && resp.status === "true" && resp.voucher) {
-                $("#voucherInput").val(resp.voucher);
-                showToast("Voucher: " + resp.voucher, "success");
-                doLogin(resp.voucher);
-            } else {
-                showToast("Failed to generate voucher.", "danger");
-            }
-        }).fail(function () {
-            showToast("Vendo device unreachable.", "danger");
-        });
+        var $form = $("#sendin");
+        $form.attr("action", loginUrl);
+        $form.find("input[name=username]").val(macClean);
+        $form.find("input[name=password]").val(macClean);
+        $form[0].submit();
+    }
+
+    // ── Cancel top-up (abort in-flight request) ───────────────────────────
+    function doCancelTopUp() {
+        if (insertCoinXhr) {
+            insertCoinXhr.abort();
+            insertCoinXhr = null;
+        }
+        $("#insertCoinModal").modal("hide");
+        $("#insertBtn").prop("disabled", false).text("INSERT COIN");
     }
 
     // ── Login (HTTP-PAP — plaintext POST to router login URL) ───────────────
@@ -417,10 +384,13 @@
             doCancelTopUp();
         });
 
-        // Convert voucher
-        $("#convertVoucherCode").on("click", function (e) {
-            e.preventDefault();
-            doConvertVoucher();
+        // Modal close (X button or backdrop click) — abort in-flight request
+        $("#insertCoinModal").on("hidden.bs.modal", function () {
+            if (insertCoinXhr) {
+                insertCoinXhr.abort();
+                insertCoinXhr = null;
+            }
+            $("#insertBtn").prop("disabled", false).text("INSERT COIN");
         });
 
         // Promo rate button
@@ -439,12 +409,6 @@
         $("#memberLoginSubmit").on("click", function (e) {
             e.preventDefault();
             doLoginMember();
-        });
-
-        // Generate voucher
-        $("#generateVoucherBtn").on("click", function (e) {
-            e.preventDefault();
-            doGenerateVoucher();
         });
 
         // Enter key on voucher input

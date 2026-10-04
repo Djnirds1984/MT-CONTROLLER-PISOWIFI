@@ -1,31 +1,34 @@
 /*
  * ============================================================
- *  AIRCOINS NETFI — NodeMCU ESP8266 Vendo Firmware (v2)
+ *  AIRCOINS NETFI — NodeMCU ESP8266 Vendo Firmware (v3)
  * ============================================================
  *
- *  Role:  Coin-operated WiFi vending machine with one-time setup mode.
+ *  Role:  Coin-operated WiFi vending — direct MAC-based session crediting.
+ *
+ *  When a coin is inserted, the NodeMCU calls the MikroTik REST API to
+ *  create or extend a hotspot user keyed by the client's MAC address
+ *  (uppercase, colon-free). No voucher codes are generated.
  *
  *  Two operating modes:
  *    1. SETUP MODE — Creates open AP "aircoins_coinslot_setup" with
- *       captive portal at /config for WiFi configuration. Triggered by:
- *       - Holding SETUP button (GPIO D3) during boot, OR
- *       - First boot (no saved credentials in SPIFFS)
+ *       captive portal at /config for WiFi + router API configuration.
+ *       Triggered by: holding SETUP button (GPIO D3) during boot, OR
+ *       first boot (no saved credentials in SPIFFS).
  *
- *    2. NORMAL MODE — Connects to configured Mikrotik hotspot as STA,
- *       runs coin-slot vendo logic, serves voucher API to portal.
+ *    2. NORMAL MODE — Connects to configured hotspot as STA,
+ *       runs coin-slot vendo logic with direct router API integration.
  *
  *  Setup Portal (/config):
- *    - WiFi scan button -> lists available SSIDs
- *    - Dropdown to select SSID + password field
- *    - "Connect & Save" -> saves credentials to SPIFFS, reboots to STA mode
+ *    - WiFi scan + select SSID + password -> saves to SPIFFS
+ *    - Router API IP, port, username, password -> saves to SPIFFS
+ *    - "Connect & Save" -> saves all credentials, reboots to STA mode
  *
  *  Normal Mode Endpoints:
- *    GET  /status               JSON: MAC, IP, uptime, connection state
- *    GET  /data/{mac}.txt       Read voucher data file
- *    GET  /getRates             Promo rates (pipe-delimited)
- *    POST /checkCoin            Poll coin status
- *    POST /generateVoucher      Generate voucher for a MAC
- *    POST /cancelTopUp          Cancel pending top-up
+ *    GET  /status          JSON: MAC, IP, uptime, connection state
+ *    GET  /getRates        Promo rates (pipe-delimited)
+ *    POST /insertCoin      Insert coin for MAC — calls router REST API
+ *      Query param: ?mac=AABBCCDDEEFF (uppercase, no colons)
+ *      Response: {"status":"true","coins":N,"time_added":"15m","mac":"..."}
  *
  *  Hardware:
  *    - NodeMCU ESP8266 (ESP-12E / ESP-12F)
@@ -38,6 +41,7 @@
  *    Libraries (ALL built-in, NO extra installs):
  *    - ESP8266WiFi
  *    - ESP8266WebServer
+ *    - ESP8266HTTPClient
  *    - SPIFFS
  *
  *  Upload:
@@ -49,6 +53,8 @@
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <FS.h>           // SPIFFS (built-in)
 
 /* ============================================================
@@ -64,10 +70,6 @@ static const uint8_t PIN_SETUP_BTN   = 0;   // GPIO D3 / flash button (active-LO
 static const uint8_t PIN_COIN        = 4;   // GPIO D2 - coin acceptor
 static const uint8_t PIN_LED         = 2;   // GPIO D4 - status LED (active-LOW)
 
-// Voucher settings
-static const char*   VOUCHER_PREFIX  = "AIR";
-static const uint8_t VOUCHER_LEN     = 6;
-
 // Coin pulse debounce (ms)
 static const uint16_t COIN_DEBOUNCE_MS = 150;
 
@@ -77,9 +79,14 @@ static const uint16_t MINUTES_PER_PULSE = 15;
 // HTTP server port
 static const uint16_t HTTP_PORT = 80;
 
+// /insertCoin polling timeout (ms) — how long to wait for a coin
+static const uint32_t INSERT_COIN_TIMEOUT_MS = 30000;
+
 // SPIFFS paths
-// Credentials stored as plain text: line 1 = SSID, line 2 = password
+// WiFi credentials: line 1 = SSID, line 2 = password
 static const char* CRED_FILE = "/wifi_cred.txt";
+// Router API credentials: line 1 = IP, line 2 = port, line 3 = username, line 4 = password
+static const char* ROUTER_API_FILE = "/router_api.txt";
 
 /* ============================================================
  * 2. GLOBAL STATE
@@ -94,19 +101,22 @@ bool setupMode = false;
 String savedSsid     = "";
 String savedPassword = "";
 
+// Router REST API credentials (loaded from SPIFFS)
+String routerApiIp   = "";
+int    routerApiPort = 80;
+String routerApiUser = "";
+String routerApiPass = "";
+
 // Coin acceptor state
 volatile uint16_t coinPulseCount   = 0;
-uint16_t          coinTotal        = 0;
 uint32_t          lastPulseMs      = 0;
-
-// Voucher state
-String pendingVoucher;
-String pendingMac;
-uint32_t voucherGeneratedAtMs = 0;
 
 // Promo rates — built at runtime from MINUTES_PER_PULSE
 // Format per line: coins#name#label#minutes#data_mb  (lines separated by \n)
 String promoRatesStr = "";
+
+// Last router API result message (for debug)
+String lastRouterResult = "";
 
 /* ============================================================
  * 3. FORWARD DECLARATIONS
@@ -122,32 +132,26 @@ void handleSaveCredentials();
 
 void handleNormalRoot();
 void handleStatus();
-void handleDataFile();
 void handleGetRates();
-void handleCheckCoin();
-void handleGenerateVoucher();
-void handleCancelTopUp();
+void handleInsertCoin();
 void handleNotFound();
 
-String generateVoucherCode();
-bool writeDataFile(const String& mac, const String& voucher);
-String readDataFile(const String& mac);
-void blinkLed(uint8_t times);
+bool routerCreateOrExtendMacUser(const String& macNoColons, uint32_t addSeconds, String& resultMsg);
+String routerApiRequest(const String& method, const String& path, const String& body);
 
 bool loadCredentials();
 bool saveCredentials(const String& ssid, const String& password);
-bool clearCredentials();
+bool loadRouterApiConfig();
+bool saveRouterApiConfig(const String& ip, int port, const String& user, const String& pass);
 
+void blinkLed(uint8_t times);
 String jsonEscape(const String& raw);
+String parseTimeToSeconds(const String& timeStr);
 
 /* ============================================================
  * 4. JSON HELPER (no ArduinoJson dependency)
  * ============================================================ */
 
-/**
- * Minimal JSON string escaper — handles the characters that MUST be
- * escaped inside a JSON string value: " \ and control chars.
- */
 String jsonEscape(const String& raw) {
   String out;
   out.reserve(raw.length() + 8);
@@ -166,28 +170,18 @@ String jsonEscape(const String& raw) {
 }
 
 /* ============================================================
- * 5. CREDENTIAL STORAGE (SPIFFS — plain text, 2 lines)
- *
- *  Format:
- *    Line 1: SSID
- *    Line 2: password  (may be empty)
+ * 5. CREDENTIAL STORAGE (SPIFFS)
  * ============================================================ */
 
 bool loadCredentials() {
-  if (!SPIFFS.exists(CRED_FILE)) {
-    return false;
-  }
+  if (!SPIFFS.exists(CRED_FILE)) return false;
   File f = SPIFFS.open(CRED_FILE, "r");
   if (!f) return false;
-
   savedSsid     = f.readStringUntil('\n');
   savedPassword = f.readStringUntil('\n');
   f.close();
-
-  // Trim trailing \r if present
   savedSsid.trim();
   savedPassword.trim();
-
   return savedSsid.length() > 0;
 }
 
@@ -200,10 +194,28 @@ bool saveCredentials(const String& ssid, const String& password) {
   return true;
 }
 
-bool clearCredentials() {
-  if (SPIFFS.exists(CRED_FILE)) {
-    return SPIFFS.remove(CRED_FILE);
-  }
+bool loadRouterApiConfig() {
+  if (!SPIFFS.exists(ROUTER_API_FILE)) return false;
+  File f = SPIFFS.open(ROUTER_API_FILE, "r");
+  if (!f) return false;
+  routerApiIp   = f.readStringUntil('\n'); routerApiIp.trim();
+  String portStr = f.readStringUntil('\n'); portStr.trim();
+  routerApiUser = f.readStringUntil('\n'); routerApiUser.trim();
+  routerApiPass = f.readStringUntil('\n'); routerApiPass.trim();
+  f.close();
+  routerApiPort = portStr.toInt();
+  if (routerApiPort <= 0) routerApiPort = 80;
+  return routerApiIp.length() > 0;
+}
+
+bool saveRouterApiConfig(const String& ip, int port, const String& user, const String& pass) {
+  File f = SPIFFS.open(ROUTER_API_FILE, "w");
+  if (!f) return false;
+  f.println(ip);
+  f.println(String(port));
+  f.println(user);
+  f.println(pass);
+  f.close();
   return true;
 }
 
@@ -219,47 +231,7 @@ ICACHE_RAM_ATTR void coinPulseISR() {
 }
 
 /* ============================================================
- * 7. VOUCHER CODE GENERATOR
- * ============================================================ */
-
-String generateVoucherCode() {
-  static const char ALPHABET[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  String code = VOUCHER_PREFIX;
-  for (uint8_t i = 0; i < VOUCHER_LEN; i++) {
-    code += ALPHABET[random(sizeof(ALPHABET) - 1)];
-  }
-  return code;
-}
-
-/* ============================================================
- * 8. SPIFFS DATA FILE I/O
- * ============================================================ */
-
-bool writeDataFile(const String& mac, const String& voucher) {
-  String path = "/data/" + mac + ".txt";
-  if (!SPIFFS.exists("/data")) {
-    SPIFFS.mkdir("/data");
-  }
-  File f = SPIFFS.open(path, "w");
-  if (!f) return false;
-  String content = voucher + "#" + String(millis());
-  f.print(content);
-  f.close();
-  return true;
-}
-
-String readDataFile(const String& mac) {
-  String path = "/data/" + mac + ".txt";
-  if (!SPIFFS.exists(path)) return "";
-  File f = SPIFFS.open(path, "r");
-  if (!f) return "";
-  String content = f.readString();
-  f.close();
-  return content;
-}
-
-/* ============================================================
- * 9. LED HELPER
+ * 7. LED HELPER
  * ============================================================ */
 
 void blinkLed(uint8_t times) {
@@ -268,6 +240,203 @@ void blinkLed(uint8_t times) {
     delay(100);
     digitalWrite(PIN_LED, HIGH);
     delay(100);
+  }
+}
+
+/* ============================================================
+ * 8. MIKROTIK TIME PARSER
+ * ============================================================ */
+
+/**
+ * Parse MikroTik time string (e.g. "1h30m", "15m", "1d") to seconds.
+ */
+String parseTimeToSeconds(const String& timeStr) {
+  if (timeStr.length() == 0) return "0";
+  uint32_t total = 0;
+  uint32_t current = 0;
+  for (unsigned int i = 0; i < timeStr.length(); i++) {
+    char c = timeStr.charAt(i);
+    if (c >= '0' && c <= '9') {
+      current = current * 10 + (c - '0');
+    } else if (c == 'd') {
+      total += current * 86400; current = 0;
+    } else if (c == 'h') {
+      total += current * 3600; current = 0;
+    } else if (c == 'm') {
+      total += current * 60; current = 0;
+    } else if (c == 's') {
+      total += current; current = 0;
+    } else if (c == 'w') {
+      total += current * 604800; current = 0;
+    }
+  }
+  total += current; // remaining seconds
+  return String(total);
+}
+
+/* ============================================================
+ * 9. ROUTER REST API CLIENT
+ * ============================================================ */
+
+/**
+ * Make an HTTP request to the MikroTik REST API.
+ * Returns the response body as a string, or empty on failure.
+ */
+String routerApiRequest(const String& method, const String& path, const String& body) {
+  if (routerApiIp.length() == 0) {
+    lastRouterResult = "Router API not configured";
+    return "";
+  }
+
+  String url;
+  if (routerApiPort == 443) {
+    url = "https://" + routerApiIp + ":" + String(routerApiPort) + path;
+  } else {
+    url = "http://" + routerApiIp + ":" + String(routerApiPort) + path;
+  }
+
+  HTTPClient http;
+  WiFiClient client;
+  WiFiClientSecure clientSecure;
+
+  if (routerApiPort == 443) {
+    clientSecure.setInsecure();  // Skip cert verification (self-signed)
+    http.begin(clientSecure, url);
+  } else {
+    http.begin(client, url);
+  }
+
+  // Basic auth
+  if (routerApiUser.length() > 0) {
+    http.setAuthorization(routerApiUser.c_str(), routerApiPass.c_str());
+  }
+
+  http.setTimeout(10000);  // 10s timeout
+
+  if (method == "GET") {
+    http.GET();
+  } else if (method == "PUT") {
+    http.addHeader("Content-Type", "application/json");
+    http.PUT(body);
+  } else if (method == "PATCH") {
+    http.addHeader("Content-Type", "application/json");
+    http.PATCH(body);
+  } else if (method == "DELETE") {
+    http.DELETE();
+  }
+
+  int httpCode = http.getCode();
+  String response = http.getString();
+  http.end();
+
+  if (httpCode < 200 || httpCode >= 300) {
+    lastRouterResult = "HTTP " + String(httpCode) + ": " + response;
+    Serial.printf("[router API] %s %s -> %d\n", method.c_str(), path.c_str(), httpCode);
+    Serial.println(response);
+    return "";
+  }
+
+  return response;
+}
+
+/**
+ * Simple JSON string value extractor.
+ * Finds "key":"value" or "key":value in a JSON string.
+ */
+String jsonGetString(const String& json, const String& key) {
+  String searchKey = "\"" + key + "\":";
+  int idx = json.indexOf(searchKey);
+  if (idx < 0) {
+    // Try with space: "key" : "value"
+    searchKey = "\"" + key + "\" : ";
+    idx = json.indexOf(searchKey);
+    if (idx < 0) return "";
+  }
+  int valStart = idx + searchKey.length();
+  // Skip whitespace
+  while (valStart < (int)json.length() && json.charAt(valStart) == ' ') valStart++;
+  if (valStart >= (int)json.length()) return "";
+
+  if (json.charAt(valStart) == '"') {
+    // Quoted string value
+    valStart++;
+    int valEnd = json.indexOf('"', valStart);
+    if (valEnd < 0) return "";
+    return json.substring(valStart, valEnd);
+  } else {
+    // Unquoted value (number, bool, etc.)
+    int valEnd = valStart;
+    while (valEnd < (int)json.length() && json.charAt(valEnd) != ',' && json.charAt(valEnd) != '}' && json.charAt(valEnd) != ']') {
+      valEnd++;
+    }
+    return json.substring(valStart, valEnd);
+  }
+}
+
+/**
+ * Create or extend a hotspot user on the MikroTik router.
+ * The user is keyed by MAC (uppercase, no colons) with password = MAC.
+ * If the user already exists, the limit-uptime is EXTENDED by addSeconds.
+ * If not, a new user is created.
+ *
+ * Returns true on success.
+ */
+bool routerCreateOrExtendMacUser(const String& macNoColons, uint32_t addSeconds, String& resultMsg) {
+  String addTimeStr = String(addSeconds) + "s";
+
+  // Step 1: Check if user already exists
+  String listResponse = routerApiRequest("GET",
+    "/rest/ip/hotspot/user?name=" + macNoColons, "");
+
+  if (listResponse.length() > 2) {
+    // User exists — listResponse is a JSON array like [{"name":"...","limit-uptime":"...",".id":"*X"}]
+    // Find the .id and current limit-uptime
+    String userId = jsonGetString(listResponse, ".id");
+    String currentLimit = jsonGetString(listResponse, "limit-uptime");
+
+    if (userId.length() > 0) {
+      // Parse current limit to seconds, add new time
+      uint32_t currentSec = parseTimeToSeconds(currentLimit).toInt();
+      uint32_t newTotal = currentSec + addSeconds;
+      String newLimitStr = String(newTotal) + "s";
+
+      // PATCH to update limit-uptime
+      String patchBody = "{\"limit-uptime\":\"" + newLimitStr + "\"}";
+      String patchResp = routerApiRequest("PATCH",
+        "/rest/ip/hotspot/user/" + userId, patchBody);
+
+      if (patchResp.length() >= 0) {
+        resultMsg = "Extended by " + addTimeStr + " (total: " + String(newTotal) + "s)";
+        Serial.printf("[router] Extended user %s: %s -> %s\n",
+          macNoColons.c_str(), currentLimit.c_str(), newLimitStr.c_str());
+        return true;
+      } else {
+        resultMsg = "PATCH failed: " + lastRouterResult;
+        return false;
+      }
+    }
+  }
+
+  // Step 2: User does not exist — create new
+  // Build JSON body manually (no ArduinoJson)
+  String createBody = "{";
+  createBody += "\"name\":\"" + jsonEscape(macNoColons) + "\",";
+  createBody += "\"password\":\"" + jsonEscape(macNoColons) + "\",";
+  createBody += "\"limit-uptime\":\"" + addTimeStr + "\",";
+  createBody += "\"comment\":\"vendo-coin\"";
+  createBody += "}";
+
+  String createResp = routerApiRequest("PUT",
+    "/rest/ip/hotspot/user", createBody);
+
+  if (createResp.length() >= 0) {
+    resultMsg = "Created with " + addTimeStr;
+    Serial.printf("[router] Created user %s with limit %s\n",
+      macNoColons.c_str(), addTimeStr.c_str());
+    return true;
+  } else {
+    resultMsg = "CREATE failed: " + lastRouterResult;
+    return false;
   }
 }
 
@@ -303,24 +472,41 @@ void handleConfigPage() {
     .status.error{background:#f8d7da;color:#721c24}
     .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
     @keyframes spin{to{transform:rotate(360deg)}}
+    h2{color:#2c3e50;font-size:16px;border-bottom:2px solid #3498db;padding-bottom:8px;margin-top:0}
   </style>
 </head>
 <body>
   <h1>AIRCOINS NETFI &mdash; Vendo Setup</h1>
+
   <div class='card'>
-    <label>Hotspot WiFi Network</label>
-    <button id='scanBtn' onclick='scanWiFi()'>Scan Hotspot WiFi</button>
+    <h2>1. Hotspot WiFi Connection</h2>
+    <label>WiFi Network</label>
+    <button id='scanBtn' onclick='scanWiFi()'>Scan WiFi Networks</button>
     <div id='scanStatus' class='status info' style='display:none;margin-top:10px'></div>
     <select id='ssidSelect' style='margin-top:10px'>
       <option value=''>-- Scan or enter manually --</option>
     </select>
-  </div>
-  <div class='card'>
-    <label>Hotspot Password</label>
+    <label>WiFi Password</label>
     <input type='password' id='wifiPass' placeholder='Enter hotspot password (leave blank if open)'>
-    <button id='saveBtn' onclick='saveConfig()'>Connect &amp; Save</button>
-    <div id='saveStatus' class='status info' style='display:none;margin-top:10px'></div>
   </div>
+
+  <div class='card'>
+    <h2>2. MikroTik Router API</h2>
+    <label>Router IP Address</label>
+    <input type='text' id='routerIp' placeholder='e.g. 192.168.88.1' value='192.168.88.1'>
+    <label>Router API Port</label>
+    <input type='number' id='routerPort' placeholder='80 for HTTP, 443 for HTTPS' value='80'>
+    <label>Router Username</label>
+    <input type='text' id='routerUser' placeholder='e.g. admin' value='admin'>
+    <label>Router Password</label>
+    <input type='password' id='routerPass' placeholder='Enter router admin password'>
+  </div>
+
+  <div class='card'>
+    <button id='saveBtn' onclick='saveConfig()'>Connect &amp; Save All</button>
+    <div id='saveStatus' class='status info' style='display:none;margin-top:15px'></div>
+  </div>
+
   <script>
     function scanWiFi(){
       var b=document.getElementById('scanBtn'),s=document.getElementById('scanStatus');
@@ -341,16 +527,24 @@ void handleConfigPage() {
     }
     function saveConfig(){
       var ssid=document.getElementById('ssidSelect').value,
-          pass=document.getElementById('wifiPass').value,
+          wifiPass=document.getElementById('wifiPass').value,
+          rIp=document.getElementById('routerIp').value.trim(),
+          rPort=document.getElementById('routerPort').value.trim(),
+          rUser=document.getElementById('routerUser').value.trim(),
+          rPass=document.getElementById('routerPass').value,
           b=document.getElementById('saveBtn'),
           s=document.getElementById('saveStatus');
-      if(!ssid){s.style.display='block';s.className='status error';s.textContent='Please select an SSID';return}
+      if(!ssid){s.style.display='block';s.className='status error';s.textContent='Please select a WiFi network';return}
+      if(!rIp){s.style.display='block';s.className='status error';s.textContent='Please enter the router IP address';return}
+      if(!rUser){s.style.display='block';s.className='status error';s.textContent='Please enter the router username';return}
       b.disabled=true;s.style.display='block';s.className='status info';
       s.innerHTML='<span class="spinner"></span> Saving credentials and connecting...';
       fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:'ssid='+encodeURIComponent(ssid)+'&password='+encodeURIComponent(pass)
+        body:'ssid='+encodeURIComponent(ssid)+'&wifi_pass='+encodeURIComponent(wifiPass)
+          +'&router_ip='+encodeURIComponent(rIp)+'&router_port='+encodeURIComponent(rPort)
+          +'&router_user='+encodeURIComponent(rUser)+'&router_pass='+encodeURIComponent(rPass)
       }).then(function(r){return r.json()}).then(function(d){
-        if(d.success){s.className='status success';s.textContent='Saved! Rebooting to connect to '+ssid+'...';
+        if(d.success){s.className='status success';s.textContent='All saved! Rebooting to connect to '+ssid+'...';
           setTimeout(function(){alert('Device is rebooting. Close this page.')},1500);
         }else{s.className='status error';s.textContent='Save failed: '+(d.error||'unknown');b.disabled=false}
       }).catch(function(e){s.className='status error';s.textContent='Save failed: '+e;b.disabled=false});
@@ -365,9 +559,6 @@ void handleConfigPage() {
 
 /**
  * GET /scan — scan WiFi networks and return JSON.
- *
- * Response shape:
- *   {"networks":[{"ssid":"...","rssi":-65,"enc":true}, ...]}
  */
 void handleScanWiFi() {
   int n = WiFi.scanNetworks();
@@ -393,28 +584,41 @@ void handleScanWiFi() {
 }
 
 /**
- * POST /save — save WiFi credentials and reboot.
- *
- * Body (form-encoded): ssid=...&password=...
- * Response: {"success":true} or {"success":false,"error":"..."}
+ * POST /save — save WiFi + router API credentials and reboot.
  */
 void handleSaveCredentials() {
-  String ssid = server.arg("ssid");
-  String pass = server.arg("password");
+  String ssid     = server.arg("ssid");
+  String wifiPass = server.arg("wifi_pass");
+  String rIp      = server.arg("router_ip");
+  String rPortStr = server.arg("router_port");
+  String rUser    = server.arg("router_user");
+  String rPass    = server.arg("router_pass");
 
   if (ssid.length() == 0) {
     server.send(400, "application/json", "{\"success\":false,\"error\":\"SSID is required\"}");
     return;
   }
-
-  if (!saveCredentials(ssid, pass)) {
-    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save credentials\"}");
+  if (rIp.length() == 0) {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Router IP is required\"}");
     return;
   }
 
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Credentials saved. Rebooting...\"}");
+  // Save WiFi credentials
+  if (!saveCredentials(ssid, wifiPass)) {
+    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save WiFi credentials\"}");
+    return;
+  }
 
-  // Let the response flush, then reboot
+  // Save router API credentials
+  int rPort = rPortStr.toInt();
+  if (rPort <= 0) rPort = 80;
+  if (!saveRouterApiConfig(rIp, rPort, rUser, rPass)) {
+    server.send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save router API config\"}");
+    return;
+  }
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"All credentials saved. Rebooting...\"}");
+
   delay(500);
   ESP.restart();
 }
@@ -434,7 +638,6 @@ void setupModeInit() {
   Serial.print("AP IP: ");
   Serial.println(apIP);
 
-  // Captive portal routes
   server.on("/",          HTTP_GET, handleSetupRoot);
   server.on("/config",    HTTP_GET, handleConfigPage);
   server.on("/scan",      HTTP_GET, handleScanWiFi);
@@ -445,7 +648,7 @@ void setupModeInit() {
   });
 
   server.begin();
-  Serial.println("Captive portal started at http://192.168.4.1/config");
+  Serial.println("Setup portal started at http://192.168.4.1/config");
 
   // Blink LED rapidly to indicate setup mode — loop forever
   while (true) {
@@ -462,15 +665,11 @@ void setupModeInit() {
  * ============================================================ */
 
 void handleNormalRoot() {
-  server.send(200, "text/plain", "AIRCOINS NETFI Vendo OK");
+  server.send(200, "text/plain", "AIRCOINS NETFI Vendo v3 OK");
 }
 
 /**
- * GET /status — JSON health check for admin panel discovery.
- *
- * Response:
- *   {"mac":"AA:BB:CC:DD:EE:FF","ip":"10.1.0.41","ssid":"...","rssi":-65,
- *    "uptime_ms":123456,"connected":true,"setup_mode":false}
+ * GET /status — JSON health check.
  */
 void handleStatus() {
   String json = "{";
@@ -480,30 +679,10 @@ void handleStatus() {
   json += "\"rssi\":"         + String(WiFi.RSSI()) + ",";
   json += "\"uptime_ms\":"    + String(millis()) + ",";
   json += "\"connected\":"    + String((WiFi.status() == WL_CONNECTED) ? "true" : "false") + ",";
-  json += "\"setup_mode\":false";
+  json += "\"setup_mode\":false,";
+  json += "\"router_api\":\"" + (routerApiIp.length() > 0 ? jsonEscape(routerApiIp) : "") + "\"";
   json += "}";
   server.send(200, "application/json", json);
-}
-
-void handleDataFile() {
-  String mac = server.arg(0);
-  mac.toUpperCase();
-  mac.replace(":", "");
-  mac.replace("-", "");
-  mac.replace(".", "");
-
-  if (mac.length() != 12) {
-    server.send(400, "text/plain", "invalid_mac");
-    return;
-  }
-
-  String content = readDataFile(mac);
-  if (content.length() == 0) {
-    server.send(404, "text/plain", "no_voucher");
-    return;
-  }
-
-  server.send(200, "text/plain", content);
 }
 
 void handleGetRates() {
@@ -511,69 +690,18 @@ void handleGetRates() {
 }
 
 /**
- * POST /checkCoin — portal polls coin status.
+ * POST /insertCoin?mac=AABBCCDDEEFF
  *
- * Response (JSON):
- *   {"status":"true","totalCoin":N,"newCoin":M,"voucher":"...","timeAdded":"...","data":"..."}
- *   {"status":"false","errorCode":"coin.not.inserted",...}
- */
-void handleCheckCoin() {
-  noInterrupts();
-  uint16_t newPulses = coinPulseCount;
-  coinPulseCount = 0;
-  interrupts();
-
-  coinTotal += newPulses;
-
-  if (newPulses == 0 && coinTotal == 0) {
-    String json = "{\"status\":\"false\",\"errorCode\":\"coin.not.inserted\","
-                  "\"totalCoin\":0,\"remainTime\":30000,\"waitTime\":30000,"
-                  "\"validity\":\"10\",\"timeAdded\":\"0\",\"data\":\"0\"}";
-    server.send(200, "application/json", json);
-    return;
-  }
-
-  if (newPulses > 0) {
-    String code = generateVoucherCode();
-    pendingVoucher = code;
-
-    String mac = server.arg("mac");
-    if (mac.length() > 0) {
-      mac.toUpperCase();
-      mac.replace(":", "");
-      writeDataFile(mac, code);
-      pendingMac = mac;
-    }
-
-    blinkLed(newPulses);
-
-    String json = "{\"status\":\"true\","
-                  "\"totalCoin\":" + String(coinTotal) + ","
-                  "\"newCoin\":" + String(newPulses) + ","
-                  "\"voucher\":\"" + jsonEscape(code) + "\","
-                  "\"timeAdded\":\"" + String((uint32_t)newPulses * MINUTES_PER_PULSE * 60) + "\","
-                  "\"data\":\"0\"}";
-    server.send(200, "application/json", json);
-    return;
-  }
-
-  // Coins were inserted earlier, still waiting
-  String json = "{\"status\":\"true\","
-                "\"totalCoin\":" + String(coinTotal) + ","
-                "\"newCoin\":0,"
-                "\"voucher\":\"" + jsonEscape(pendingVoucher) + "\","
-                "\"timeAdded\":\"" + String((uint32_t)coinTotal * MINUTES_PER_PULSE * 60) + "\","
-                "\"data\":\"0\"}";
-  server.send(200, "application/json", json);
-}
-
-/**
- * POST /generateVoucher — portal requests a voucher for a MAC.
+ * Waits for coin pulse(s), then calls the MikroTik REST API to create
+ * or extend a hotspot user keyed by the client MAC.
  *
- * Body (form-encoded): mac={MAC}
- * Response: {"status":"true","voucher":"AIRxxxxxx"}
+ * Response:
+ *   {"status":"true","coins":N,"time_added":"15m","mac":"AABBCCDDEEFF"}
+ *   {"status":"false","error":"no_coin"}
+ *   {"status":"false","error":"router_api_failed","detail":"..."}
  */
-void handleGenerateVoucher() {
+void handleInsertCoin() {
+  // Read and normalize MAC
   String mac = server.arg("mac");
   mac.toUpperCase();
   mac.replace(":", "");
@@ -581,43 +709,72 @@ void handleGenerateVoucher() {
   mac.replace(".", "");
 
   if (mac.length() != 12) {
-    server.send(400, "application/json", "{\"status\":\"false\",\"errorCode\":\"invalid_mac\"}");
+    server.send(400, "application/json",
+      "{\"status\":\"false\",\"error\":\"invalid_mac\",\"detail\":\"MAC must be 12 hex chars\"}");
     return;
   }
 
-  String code = generateVoucherCode();
-  writeDataFile(mac, code);
-  pendingVoucher = code;
-  pendingMac = mac;
-  voucherGeneratedAtMs = millis();
+  if (routerApiIp.length() == 0) {
+    server.send(500, "application/json",
+      "{\"status\":\"false\",\"error\":\"router_not_configured\"}");
+    return;
+  }
 
-  blinkLed(2);
+  // Wait for coin pulse(s) within timeout
+  Serial.printf("[insertCoin] Waiting for coin from MAC %s...\n", mac.c_str());
 
-  String json = "{\"status\":\"true\",\"voucher\":\"" + jsonEscape(code) + "\"}";
-  server.send(200, "application/json", json);
-}
+  uint32_t startMs = millis();
+  uint16_t pulses = 0;
 
-/**
- * POST /cancelTopUp — cancel pending coin session.
- *
- * Body (form-encoded): voucher={code}&mac={MAC}
- */
-void handleCancelTopUp() {
-  String mac = server.arg("mac");
-  mac.toUpperCase();
-  mac.replace(":", "");
+  while (millis() - startMs < INSERT_COIN_TIMEOUT_MS) {
+    noInterrupts();
+    pulses = coinPulseCount;
+    coinPulseCount = 0;
+    interrupts();
 
-  noInterrupts();
-  coinPulseCount = 0;
-  interrupts();
-  coinTotal = 0;
-  pendingVoucher = "";
-  pendingMac = "";
+    if (pulses > 0) break;
+    delay(50);
+    server.handleClient();  // Keep HTTP alive while waiting
+  }
 
-  String path = "/data/" + mac + ".txt";
-  if (SPIFFS.exists(path)) SPIFFS.remove(path);
+  if (pulses == 0) {
+    server.send(200, "application/json",
+      "{\"status\":\"false\",\"error\":\"no_coin\",\"detail\":\"No coin inserted within timeout\"}");
+    return;
+  }
 
-  server.send(200, "text/plain", "cancelled");
+  // Calculate time to add
+  uint32_t addSeconds = (uint32_t)pulses * MINUTES_PER_PULSE * 60;
+  Serial.printf("[insertCoin] %u pulse(s) from MAC %s -> %u seconds\n",
+    pulses, mac.c_str(), addSeconds);
+
+  // Call router REST API
+  String resultMsg = "";
+  bool ok = routerCreateOrExtendMacUser(mac, addSeconds, resultMsg);
+
+  if (ok) {
+    blinkLed(pulses);
+
+    // Format time for display
+    uint32_t addMins = addSeconds / 60;
+    String timeAdded = String(addMins) + "m";
+
+    String json = "{";
+    json += "\"status\":\"true\",";
+    json += "\"coins\":" + String(pulses) + ",";
+    json += "\"time_added\":\"" + timeAdded + "\",";
+    json += "\"mac\":\"" + jsonEscape(mac) + "\",";
+    json += "\"detail\":\"" + jsonEscape(resultMsg) + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+  } else {
+    String json = "{";
+    json += "\"status\":\"false\",";
+    json += "\"error\":\"router_api_failed\",";
+    json += "\"detail\":\"" + jsonEscape(resultMsg) + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+  }
 }
 
 void handleNotFound() {
@@ -633,7 +790,6 @@ void normalModeInit() {
   Serial.printf("Connecting to '%s'...\n", savedSsid.c_str());
 
   WiFi.mode(WIFI_STA);
-  // Set hostname to "vendo-XXXX" (last 2 MAC bytes) for DHCP discovery
   String hostname = "vendo-" + WiFi.macAddress().substring(12, 17);
   hostname.replace(":", "");
   WiFi.hostname(hostname.c_str());
@@ -659,14 +815,13 @@ void normalModeInit() {
   server.on("/",           HTTP_GET,  handleNormalRoot);
   server.on("/status",     HTTP_GET,  handleStatus);
   server.on("/getRates",   HTTP_GET,  handleGetRates);
-  server.on("/data/(.+)",  HTTP_GET,  handleDataFile);
-  server.on("/checkCoin",        HTTP_POST, handleCheckCoin);
-  server.on("/generateVoucher",  HTTP_POST, handleGenerateVoucher);
-  server.on("/cancelTopUp",      HTTP_POST, handleCancelTopUp);
+  server.on("/insertCoin", HTTP_POST, handleInsertCoin);
   server.onNotFound(handleNotFound);
 
   server.begin();
   Serial.println("HTTP server started on port " + String(HTTP_PORT));
+  Serial.printf("Router API: %s:%d (user: %s)\n",
+    routerApiIp.c_str(), routerApiPort, routerApiUser.c_str());
   Serial.println("=== Ready ===");
 }
 
@@ -678,11 +833,9 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println();
-  Serial.println("=== AIRCOINS NETFI Vendo Firmware v2 ===");
+  Serial.println("=== AIRCOINS NETFI Vendo Firmware v3 ===");
 
   // Build promo rates string from MINUTES_PER_PULSE
-  // Format: name#col1#col2#minutes#data_mb  rows separated by |
-  // Portal parses: columns[0]=name, columns[3]=minutes, columns[4]=data_mb
   promoRatesStr = "";
   promoRatesStr += "1 Coin###" + String(MINUTES_PER_PULSE) + "#";
   promoRatesStr += "|3 Coins###" + String(MINUTES_PER_PULSE * 3) + "#";
@@ -709,24 +862,21 @@ void setup() {
   }
   Serial.println("OK");
 
-  if (!SPIFFS.exists("/data")) {
-    SPIFFS.mkdir("/data");
-    Serial.println("Created /data/ directory");
-  }
-
   // Check if SETUP button is held during boot
   bool setupButtonHeld = (digitalRead(PIN_SETUP_BTN) == LOW);
 
   // Load saved credentials
-  bool hasCredentials = loadCredentials();
+  bool hasWifiCred = loadCredentials();
+  bool hasRouterApi = loadRouterApiConfig();
 
   Serial.printf("Setup button: %s\n", setupButtonHeld ? "HELD" : "not held");
-  Serial.printf("Saved credentials: %s\n", hasCredentials ? "YES" : "NO");
+  Serial.printf("WiFi credentials: %s\n", hasWifiCred ? "YES" : "NO");
+  Serial.printf("Router API config: %s\n", hasRouterApi ? "YES" : "NO");
 
   // Enter setup mode if:
   //  - Setup button is held during boot, OR
-  //  - No saved credentials exist (first boot)
-  if (setupButtonHeld || !hasCredentials) {
+  //  - No saved WiFi credentials (first boot)
+  if (setupButtonHeld || !hasWifiCred) {
     setupModeInit();  // This function never returns
   }
 
@@ -762,11 +912,11 @@ void loop() {
   static uint32_t lastStatusMs = 0;
   if (millis() - lastStatusMs > 30000) {
     lastStatusMs = millis();
-    Serial.printf("[status] IP=%s  coins=%u  voucher=%s  mac=%s\n",
+    Serial.printf("[status] IP=%s  router=%s:%d  lastResult=%s\n",
       WiFi.localIP().toString().c_str(),
-      coinTotal,
-      pendingVoucher.c_str(),
-      pendingMac.c_str()
+      routerApiIp.c_str(),
+      routerApiPort,
+      lastRouterResult.c_str()
     );
   }
 
