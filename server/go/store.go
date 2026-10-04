@@ -3,8 +3,11 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver (CGO-free)
@@ -120,11 +123,29 @@ func (s *Store) migrateApp() error {
 			message    TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
+		`CREATE TABLE IF NOT EXISTS routers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL DEFAULT '',
+			host TEXT NOT NULL,
+			port INTEGER NOT NULL DEFAULT 8728,
+			api_mode TEXT NOT NULL DEFAULT 'rest',
+			username TEXT NOT NULL DEFAULT 'admin',
+			password TEXT NOT NULL DEFAULT '',
+			is_active INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
 	}
 	for _, q := range stmts {
 		if _, err := s.App.Exec(q); err != nil {
 			return fmt.Errorf("%q: %w", q[:40], err)
 		}
+	}
+
+	// One-time seed: migrate a legacy single-router setup (router_url /
+	// router_user / router_pass settings) into the new routers table so
+	// upgrading installs keep working without reconfiguration.
+	if err := s.seedRoutersFromSettings(); err != nil {
+		return err
 	}
 
 	// Default vendo device + promo tiers on first boot only.
@@ -291,4 +312,117 @@ func (s *Store) adminVerify(username, password string) (bool, error) {
 		return false, err
 	}
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
+}
+
+// --------------------------------------------------------------- routers
+
+// routerRow is one entry of the routers table. Password is never
+// serialised to JSON (json:"-"); the API layer masks it explicitly.
+type routerRow struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	APIMode  string `json:"api_mode"`
+	Username string `json:"username"`
+	Password string `json:"-"`
+	IsActive int    `json:"is_active"`
+}
+
+// seedRoutersFromSettings performs the one-time migration of a legacy
+// single-router install into the routers table. It only runs when the
+// table is empty and a non-empty router_url setting exists.
+func (s *Store) seedRoutersFromSettings() error {
+	var n int
+	if err := s.App.QueryRow("SELECT COUNT(*) FROM routers").Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	raw := s.getSetting("router_url", "")
+	if raw == "" {
+		return nil
+	}
+	host, port := splitRouterURL(raw)
+	if host == "" {
+		return nil
+	}
+	_, err := s.App.Exec(`INSERT INTO routers
+		(name, host, port, api_mode, username, password, is_active)
+		VALUES (?, ?, ?, 'rest', ?, ?, 1)`,
+		"Router 1", host, port,
+		s.getSetting("router_user", ""), s.getSetting("router_pass", ""))
+	return err
+}
+
+// splitRouterURL extracts host and port from a router_url. The scheme
+// decides the default port (http->80, https->443); an explicit port in
+// the URL always wins.
+func splitRouterURL(raw string) (string, int) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return "", 80
+	}
+	port := 80
+	if u.Scheme == "https" {
+		port = 443
+	}
+	if p := u.Port(); p != "" {
+		if v, cerr := strconv.Atoi(p); cerr == nil {
+			port = v
+		}
+	}
+	return u.Hostname(), port
+}
+
+func (s *Store) routersAll() ([]routerRow, error) {
+	rows, err := s.App.Query(`SELECT id, name, host, port, api_mode, username, password, is_active
+		FROM routers ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []routerRow{}
+	for rows.Next() {
+		var r routerRow
+		if err := rows.Scan(&r.ID, &r.Name, &r.Host, &r.Port,
+			&r.APIMode, &r.Username, &r.Password, &r.IsActive); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) routerByID(id int64) (*routerRow, error) {
+	var r routerRow
+	err := s.App.QueryRow(`SELECT id, name, host, port, api_mode, username, password, is_active
+		FROM routers WHERE id = ?`, id).
+		Scan(&r.ID, &r.Name, &r.Host, &r.Port,
+			&r.APIMode, &r.Username, &r.Password, &r.IsActive)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// routerActiveRow returns the row flagged is_active, or (nil, nil) when
+// no router is marked active (callers treat nil as "feature off").
+func (s *Store) routerActiveRow() (*routerRow, error) {
+	var r routerRow
+	err := s.App.QueryRow(`SELECT id, name, host, port, api_mode, username, password, is_active
+		FROM routers WHERE is_active = 1 ORDER BY id LIMIT 1`).
+		Scan(&r.ID, &r.Name, &r.Host, &r.Port,
+			&r.APIMode, &r.Username, &r.Password, &r.IsActive)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }

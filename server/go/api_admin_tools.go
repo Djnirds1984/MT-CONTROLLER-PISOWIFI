@@ -210,7 +210,7 @@ func (s *Store) handleSessions(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	rc := routerFromSettings(s)
+	rc := routerActive(s)
 	if rc == nil {
 		respondJSON(w, http.StatusOK, map[string]any{"router": false, "sessions": []any{}})
 		return
@@ -247,7 +247,7 @@ func (s *Store) handleKick(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "id required")
 		return
 	}
-	rc := routerFromSettings(s)
+	rc := routerActive(s)
 	if rc == nil {
 		respondError(w, http.StatusBadRequest, "router not configured")
 		return
@@ -262,7 +262,7 @@ func (s *Store) handleKick(w http.ResponseWriter, r *http.Request) {
 // -------------------------------------------------------------- settings
 
 var settingsKeys = []string{
-	"portal_name", "sbc_url", "router_url", "router_user", "router_pass",
+	"portal_name", "sbc_url",
 	"rate_limit", "idle_timeout", "interim",
 	"radius_secret", "sbc_ip", "sbc_mac",
 }
@@ -282,9 +282,6 @@ func settingsGet(w http.ResponseWriter, _ *http.Request, s *Store) {
 	cur := map[string]string{
 		"portal_name":   "AIRCOINS NETFI",
 		"sbc_url":       "",
-		"router_url":    "",
-		"router_user":   "",
-		"router_pass":   "",
 		"rate_limit":    "2M/2M",
 		"idle_timeout":  "600",
 		"interim":       "300",
@@ -316,7 +313,7 @@ func (s *Store) settingsSave(w http.ResponseWriter, r *http.Request) {
 				respondError(w, http.StatusBadRequest, "portal_name must be 1..40 chars")
 				return
 			}
-		case "sbc_url", "router_url":
+		case "sbc_url":
 			if val != "" {
 				u, err := url.Parse(val)
 				if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -371,7 +368,7 @@ func (s *Store) handleStubsStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{"router": false, "stubs": []map[string]any{}}
-	rc := routerFromSettings(s)
+	rc := routerActive(s)
 	remote := map[string]int64{}
 	if rc == nil {
 		s.stubsFill(w, local, remote, out)
@@ -424,7 +421,7 @@ func (s *Store) handleStubsUpload(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "set sbc_url in Settings first (router-reachable portal URL)")
 		return
 	}
-	rc := routerFromSettings(s)
+	rc := routerActive(s)
 	if rc == nil {
 		respondError(w, http.StatusBadRequest, "router not configured in Settings")
 		return

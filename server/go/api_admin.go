@@ -108,7 +108,7 @@ func (s *Store) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{
 		"portal_name":       s.getSetting("portal_name", "AIRCOINS NETFI"),
-		"router_configured": routerFromSettings(s) != nil,
+		"router_configured": routerActive(s) != nil,
 	}
 	var n int
 	if err := s.App.QueryRow("SELECT COUNT(*) FROM vouchers").Scan(&n); err == nil {
@@ -139,7 +139,7 @@ func (s *Store) handleOverview(w http.ResponseWriter, r *http.Request) {
 		rows.Close()
 	}
 	out["recent_coins"] = recent
-	if rc := routerFromSettings(s); rc != nil {
+	if rc := routerActive(s); rc != nil {
 		if active, err := rc.listActive(); err == nil {
 			out["online_sessions"] = len(active)
 		}

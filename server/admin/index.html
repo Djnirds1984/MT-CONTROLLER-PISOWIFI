@@ -222,6 +222,47 @@
     <!-- settings -->
     <section id="view-settings" class="adm-view" hidden>
       <div class="adm-view-head"><h2>Settings</h2></div>
+
+      <!-- routers -->
+      <div class="adm-card">
+        <div class="adm-view-head">
+          <h3 style="margin:0">Routers</h3>
+          <button id="rtAdd" class="adm-btn" type="button">Add router</button>
+        </div>
+        <div id="rtList"></div>
+        <div id="rtForm" hidden>
+          <div class="adm-grid">
+            <label class="adm-field">Name
+              <input id="rt_name" placeholder="Main router">
+            </label>
+            <label class="adm-field">Host / IP
+              <input id="rt_host" placeholder="10.0.0.1">
+            </label>
+            <label class="adm-field">Port
+              <input id="rt_port" type="number" min="1" max="65535" value="80">
+            </label>
+            <label class="adm-field">API mode
+              <select id="rt_mode">
+                <option value="rest">REST API</option>
+                <option value="native">Native API</option>
+              </select>
+            </label>
+            <label class="adm-field">Username
+              <input id="rt_user" value="admin">
+            </label>
+            <label class="adm-field">Password
+              <input id="rt_pass" type="password" placeholder="leave empty to keep">
+            </label>
+          </div>
+          <div id="rtTestResult" class="adm-alert" hidden></div>
+          <div class="adm-toolbar" style="margin-bottom:0">
+            <button id="rtSave" class="adm-btn" type="button">Save router</button>
+            <button id="rtTest" class="adm-btn small" type="button">Test connection</button>
+            <button id="rtCancel" class="adm-btn small" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <div class="adm-card">
         <div class="adm-grid">
           <label class="adm-field">Portal name
@@ -229,15 +270,6 @@
           </label>
           <label class="adm-field">SBC URL (router-reachable portal base)
             <input id="st_sbc_url" placeholder="http://10.0.0.252">
-          </label>
-          <label class="adm-field">Router REST URL
-            <input id="st_router_url" placeholder="http://10.0.0.1">
-          </label>
-          <label class="adm-field">Router user
-            <input id="st_router_user">
-          </label>
-          <label class="adm-field">Router password
-            <input id="st_router_pass" type="password">
           </label>
           <label class="adm-field">RADIUS shared secret
             <input id="st_radius_secret">

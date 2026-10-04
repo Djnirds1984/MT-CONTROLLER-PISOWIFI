@@ -166,7 +166,11 @@ func (s *Store) handleMTStatus(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	rc := routerFromSettings(s)
+	// The MikroTik configurator drives RouterOS v7 REST exclusively
+	// (/rest/radius, /rest/ip/hotspot/...), so it needs the concrete REST
+	// client. A native-mode active router yields nil here and is reported
+	// as "not reachable" below.
+	rc, _ := routerActive(s).(*RouterClient)
 	sbc := s.mtSBCInfo(rc)
 	out := map[string]any{
 		"router_configured": rc != nil,
@@ -185,7 +189,7 @@ func (s *Store) handleMTStatus(w http.ResponseWriter, r *http.Request) {
 	if rc == nil {
 		checks = append(checks, mtCheck{
 			Key: "reach", Label: "Router reachable",
-			Detail: "Set router_url, router_user and router_pass in Settings first.",
+			Detail: "Add and activate a REST-mode router in the Routers page first.",
 		})
 		out["checks"] = checks
 		respondJSON(w, http.StatusOK, out)
@@ -424,9 +428,10 @@ func (s *Store) handleMTApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rc := routerFromSettings(s)
+	// REST-only configurator: a native-mode active router yields nil here.
+	rc, _ := routerActive(s).(*RouterClient)
 	if rc == nil {
-		respondError(w, http.StatusBadRequest, "configure router_url / user / password in Settings first")
+		respondError(w, http.StatusBadRequest, "activate a REST-mode router in the Routers page first")
 		return
 	}
 

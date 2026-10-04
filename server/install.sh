@@ -264,6 +264,11 @@ if grep -v '^[[:space:]]*#' /etc/lighttpd/conf-available/60-aircoins.conf | grep
 fi
 lighty-enable-mod aircoins >/dev/null || true
 
+# The stock lighttpd.conf sets server.document-root globally; our
+# conf-enabled file also sets it (to the portal root). Lighttpd rejects
+# duplicate global assignments, so comment out the stock one.
+sed -i 's|^\(\s*server\.document-root\s*=\)|#\1|' /etc/lighttpd/lighttpd.conf
+
 # ------------------------------------------------------------- freeradius --
 
 FR_ETC="$(ls -d /etc/freeradius/3.* 2>/dev/null | sort -V | tail -1 || true)"

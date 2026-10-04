@@ -11,6 +11,17 @@ import (
 	"time"
 )
 
+// RouterAPI is the transport-agnostic view of a router. Both the REST
+// client (RouterClient) and the legacy binary API client (NativeClient)
+// satisfy it, so the panel never depends on which protocol is in use.
+type RouterAPI interface {
+	listActive() ([]map[string]any, error)
+	kick(id string) error
+	listFiles() ([]routerFileInfo, error)
+	uploadStub(remoteName string, content []byte) error
+	remoteStubMap(dir string) (map[string]int64, error)
+}
+
 // RouterClient talks RouterOS v7 REST (HTTP Basic + JSON).
 // All JSON values come back as strings; object ids look like "*12".
 type RouterClient struct {
@@ -20,17 +31,40 @@ type RouterClient struct {
 	hc   *http.Client
 }
 
-// routerFromSettings builds a client from stored settings, or nil when
-// no router is configured (every caller must treat nil as "feature off").
-func routerFromSettings(s *Store) *RouterClient {
-	base := s.getSetting("router_url", "")
-	if base == "" {
+// routerActive builds a client for the currently active router, or nil
+// when none is configured (every caller must treat nil as "feature off").
+func routerActive(s *Store) RouterAPI {
+	row, err := s.routerActiveRow()
+	if err != nil || row == nil {
 		return nil
+	}
+	return routerFromRow(row)
+}
+
+// routerFromRow builds the concrete client for a router row: a legacy
+// binary API client for api_mode "native", otherwise a REST client.
+//
+// REST base-URL rule (matches the operator's proven setup, where the
+// router serves REST on plain HTTP port 80):
+//
+//	port 80           -> http://host        (no port in the URL)
+//	port 443          -> https://host
+//	any other port    -> http://host:port
+func routerFromRow(row *routerRow) RouterAPI {
+	if row.APIMode == "native" {
+		return &NativeClient{host: row.Host, port: row.Port, user: row.Username, pass: row.Password}
+	}
+	base := "http://" + row.Host
+	if row.Port == 443 {
+		base = "https://" + row.Host
+	}
+	if row.Port != 80 && row.Port != 443 {
+		base = fmt.Sprintf("http://%s:%d", row.Host, row.Port)
 	}
 	return &RouterClient{
 		base: strings.TrimRight(base, "/"),
-		user: s.getSetting("router_user", ""),
-		pass: s.getSetting("router_pass", ""),
+		user: row.Username,
+		pass: row.Password,
 		hc:   &http.Client{Timeout: 15 * time.Second},
 	}
 }

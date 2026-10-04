@@ -1,5 +1,9 @@
 /* AIRCOINS NETFI admin panel — self-contained, no external fonts/CDNs. */
 
+/* The hidden attribute must win over component display rules (e.g.
+   .adm-login sets display:flex which otherwise overrides [hidden]). */
+[hidden] { display: none !important; }
+
 :root {
   --teal: #00bcd4;
   --teal-deep: #00838f;

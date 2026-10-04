@@ -180,7 +180,7 @@ func (s *Store) handleSession(w http.ResponseWriter, r *http.Request) {
 		"ip":          ip,
 		"online":      nil,
 	}
-	rc := routerFromSettings(s)
+	rc := routerActive(s)
 	if rc == nil {
 		respondJSON(w, http.StatusOK, out)
 		return

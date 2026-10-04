@@ -686,8 +686,8 @@
 
   /* ---------------------------- settings ---------------------------- */
 
-  var ST_KEYS = ['portal_name', 'sbc_url', 'router_url', 'router_user',
-    'router_pass', 'radius_secret', 'rate_limit', 'idle_timeout', 'interim'];
+  var ST_KEYS = ['portal_name', 'sbc_url', 'radius_secret',
+    'rate_limit', 'idle_timeout', 'interim'];
 
   function loadSettings() {
     api('/api/admin/settings').then(function (d) {
@@ -706,6 +706,7 @@
         chips.appendChild(el('span', 'adm-badge warn', 'no group replies yet — press Save to push them'));
       }
     }).catch(function (e) { fail(null, e); });
+    loadRouters();
   }
 
   function saveSettings() {
@@ -720,6 +721,137 @@
       toast('Settings saved — RADIUS group attributes pushed.');
       loadSettings();
     }).catch(function (e) { busy($('stSave'), false); fail(null, e); });
+  }
+
+  /* ----------------------------- routers ---------------------------- */
+
+  var rtEditId = null; // null = adding a new router
+
+  function loadRouters() {
+    api('/api/admin/routers').then(function (d) {
+      var list = $('rtList');
+      clear(list);
+      var routers = d.routers || [];
+      if (!routers.length) {
+        list.appendChild(el('p', 'adm-hint',
+          'No routers configured yet — add one to enable hotspot management.'));
+        return;
+      }
+      routers.forEach(function (rt) {
+        var row = el('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;' +
+          'padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap';
+        var info = el('span');
+        info.textContent = (rt.name || 'Unnamed') + ' — ' + rt.host + ':' + rt.port;
+        row.appendChild(info);
+        row.appendChild(el('span',
+          'adm-badge ' + (rt.api_mode === 'native' ? 'warn' : 'info'),
+          rt.api_mode === 'native' ? 'native' : 'rest'));
+        if (rt.is_active) { row.appendChild(el('span', 'adm-badge ok', 'active')); }
+        var spacer = el('span');
+        spacer.style.flex = '1';
+        row.appendChild(spacer);
+
+        var bAct = el('button', 'adm-btn small', 'Activate');
+        bAct.type = 'button';
+        if (rt.is_active) { bAct.disabled = true; }
+        bAct.addEventListener('click', function () { setActiveRouter(rt.id); });
+        row.appendChild(bAct);
+
+        var bEdit = el('button', 'adm-btn small', 'Edit');
+        bEdit.type = 'button';
+        bEdit.addEventListener('click', function () { showRouterForm(rt); });
+        row.appendChild(bEdit);
+
+        var bDel = el('button', 'adm-btn small danger', 'Delete');
+        bDel.type = 'button';
+        bDel.addEventListener('click', function () { deleteRouter(rt.id); });
+        row.appendChild(bDel);
+
+        list.appendChild(row);
+      });
+    }).catch(function (e) { fail(null, e); });
+  }
+
+  function showRouterForm(rt) {
+    rtEditId = rt ? rt.id : null;
+    $('rt_name').value = rt ? rt.name : '';
+    $('rt_host').value = rt ? rt.host : '';
+    $('rt_port').value = rt ? rt.port : 80;
+    $('rt_mode').value = rt ? rt.api_mode : 'rest';
+    $('rt_user').value = rt ? rt.username : 'admin';
+    $('rt_pass').value = '';
+    $('rt_pass').placeholder = rt ? 'leave empty to keep current' : '';
+    $('rtTestResult').hidden = true;
+    $('rtForm').hidden = false;
+  }
+
+  function hideRouterForm() {
+    $('rtForm').hidden = true;
+    rtEditId = null;
+  }
+
+  function saveRouter() {
+    var body = {
+      name: $('rt_name').value.trim(),
+      host: $('rt_host').value.trim(),
+      port: parseInt($('rt_port').value, 10) || 80,
+      api_mode: $('rt_mode').value,
+      username: $('rt_user').value.trim(),
+      password: $('rt_pass').value
+    };
+    if (!body.host) { toast('Host is required.', true); return; }
+    var path = rtEditId ? '/api/admin/routers/save' : '/api/admin/routers';
+    if (rtEditId) { body.id = rtEditId; }
+    busy($('rtSave'), true);
+    api(path, { method: 'POST', body: body }).then(function () {
+      busy($('rtSave'), false);
+      hideRouterForm();
+      toast('Router saved.');
+      loadRouters();
+    }).catch(function (e) { busy($('rtSave'), false); fail(null, e); });
+  }
+
+  function deleteRouter(id) {
+    if (!window.confirm('Delete this router?')) { return; }
+    api('/api/admin/routers/delete', { method: 'POST', body: { id: id } }).then(function () {
+      toast('Router deleted.');
+      loadRouters();
+    }).catch(function (e) { fail(null, e); });
+  }
+
+  function setActiveRouter(id) {
+    api('/api/admin/routers/active', { method: 'POST', body: { id: id } }).then(function () {
+      toast('Active router changed.');
+      loadRouters();
+    }).catch(function (e) { fail(null, e); });
+  }
+
+  function testRouter() {
+    var body = {
+      host: $('rt_host').value.trim(),
+      port: parseInt($('rt_port').value, 10) || 80,
+      api_mode: $('rt_mode').value,
+      username: $('rt_user').value.trim(),
+      password: $('rt_pass').value
+    };
+    if (rtEditId && !body.password) { body.id = rtEditId; }
+    var box = $('rtTestResult');
+    box.hidden = false;
+    box.className = 'adm-alert';
+    box.textContent = 'Testing...';
+    api('/api/admin/routers/test', { method: 'POST', body: body }).then(function (d) {
+      if (d.ok) {
+        box.className = 'adm-alert ok';
+        box.textContent = 'Connected — identity: ' + (d.identity || 'unknown');
+      } else {
+        box.className = 'adm-alert err';
+        box.textContent = d.error || 'Connection failed';
+      }
+    }).catch(function (e) {
+      box.className = 'adm-alert err';
+      box.textContent = e.message;
+    });
   }
 
   /* ------------------------------ tools ----------------------------- */
@@ -819,6 +951,14 @@
     $('mtApply').addEventListener('click', applyMT);
 
     $('stSave').addEventListener('click', saveSettings);
+
+    $('rtAdd').addEventListener('click', function () { showRouterForm(null); });
+    $('rtSave').addEventListener('click', saveRouter);
+    $('rtTest').addEventListener('click', testRouter);
+    $('rtCancel').addEventListener('click', hideRouterForm);
+    $('rt_mode').addEventListener('change', function () {
+      $('rt_port').value = this.value === 'native' ? 8728 : 80;
+    });
 
     $('stubAll').addEventListener('click', function () { uploadStubs([], this); });
 
