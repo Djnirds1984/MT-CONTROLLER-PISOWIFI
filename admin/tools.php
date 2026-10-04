@@ -214,10 +214,11 @@ aircoins_header('Tools', 'tools');
   </div>
   <div class="card__body">
     <p class="hint" style="margin-bottom:16px">
-      If the <strong>full SBC portal</strong> (login.html ~23 KB) was uploaded to the router
-      instead of the <strong>thin redirect stubs</strong> (&lt;3 KB each), voucher login fails with
-      &ldquo;invalid username or password&rdquo; because the router serves the full portal in
-      CHAP mode instead of redirecting to the SBC for HTTP-PAP login.
+      The router must hold <strong>thin redirect stubs</strong> (&lt;3 KB each) that immediately
+      forward the browser to the SBC portal. If the stubs are <strong>missing</strong> or the
+      <strong>full portal</strong> was uploaded instead, the captive portal will not redirect
+      to the SBC &mdash; clients see the router&rsquo;s default page or a broken login screen.
+      Use <strong>Diagnose</strong> to check, then <strong>Fix &mdash; Upload Stubs</strong> to push the correct files.
     </p>
 
     <!-- Router selector + SBC IP -->
@@ -319,10 +320,11 @@ aircoins_header('Tools', 'tools');
       <dt style="font-weight:600;margin-top:8px">Why this fix is needed</dt>
       <dd class="hint" style="margin:0 0 8px">
         The router must serve <strong>thin redirect stubs</strong> (&lt;3 KB each) that immediately
-        forward the browser to the SBC portal. If the <strong>full portal</strong> (23 KB login.html)
-        is uploaded instead, RouterOS substitutes <code>$(var)</code> tokens server-side,
-        <code>varbridge.js</code> thinks it's router-native mode, and login uses CHAP hashing
-        instead of HTTP-PAP — causing &ldquo;invalid username or password&rdquo;.
+        forward the browser to the SBC portal via meta-refresh. If the stubs are <strong>missing</strong>
+        (deleted or never uploaded), RouterOS falls back to its built-in default hotspot pages and
+        clients never reach the SBC portal. If the <strong>full portal</strong> (23 KB login.html)
+        was uploaded instead, the router serves it directly &mdash; but the MikroTik
+        <code>$(var)</code> tokens stay literal on the SBC, breaking the login flow.
       </dd>
       <dt style="font-weight:600;margin-top:8px">What the fix does</dt>
       <dd class="hint" style="margin:0 0 8px">
