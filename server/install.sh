@@ -257,7 +257,9 @@ log "configuring lighttpd (single port 80)..."
 sed -e "s|@@PORTAL_DOCROOT@@|$PORTAL_ROOT|g" \
 	-e "s|@@ADMIN_DOCROOT@@|$ADMIN_ROOT|g" \
 	"$SRC/conf/lighttpd/aircoins.conf" > /etc/lighttpd/conf-available/60-aircoins.conf
-if grep -q '@@' /etc/lighttpd/conf-available/60-aircoins.conf; then
+# comment lines may document token names — only a live setting still holding
+# a token is an error
+if grep -v '^[[:space:]]*#' /etc/lighttpd/conf-available/60-aircoins.conf | grep -q '@@'; then
 	die "unsubstituted tokens in lighttpd config — aborting"
 fi
 lighty-enable-mod aircoins >/dev/null || true
@@ -273,7 +275,8 @@ log "configuring FreeRADIUS in $FR_ETC ..."
 [ -f "$FR_ETC/mods-available/sql" ] && cp -n "$FR_ETC/mods-available/sql" "$FR_ETC/mods-available/sql.aircoins-bak" || true
 sed -e "s|@@RADIUS_DB@@|$DATA_DIR/radius.db|g" \
 	"$SRC/conf/freeradius/sql" > "$FR_ETC/mods-available/sql"
-grep -q '@@' "$FR_ETC/mods-available/sql" && die "unsubstituted tokens in the sql module"
+grep -v '^[[:space:]]*#' "$FR_ETC/mods-available/sql" | grep -q '@@' \
+	&& die "unsubstituted tokens in the sql module"
 ln -sfn ../mods-available/sql "$FR_ETC/mods-enabled/sql"
 
 # site: our server block replaces default/inner-tunnel.
