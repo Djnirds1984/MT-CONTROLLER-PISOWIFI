@@ -284,6 +284,10 @@ install -m 0644 "$SRC/conf/freeradius/aircoins" "$FR_ETC/sites-available/aircoin
 rm -f "$FR_ETC/sites-enabled/default" "$FR_ETC/sites-enabled/inner-tunnel"
 ln -sfn ../sites-available/aircoins "$FR_ETC/sites-enabled/aircoins"
 
+# The aircoins site only handles PAP/CHAP — no Auth-Type EAP section.
+# Remove stock modules that require sections our site does not provide.
+rm -f "$FR_ETC/mods-enabled/eap"
+
 # clients.conf: the NAS is keyed by the router's REAL source IP. Get this
 # wrong and every login dies as "unknown client" in radius.log.
 FRV="$(freeradius -v 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
