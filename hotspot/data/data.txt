@@ -1,0 +1,2 @@
+# AIRCOINS NETFI — Portal Data File
+# This file is used by the portal for runtime data storage.

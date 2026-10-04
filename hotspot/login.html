@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Captive Portal Login Page
+  Dual-mode: router-native (MikroTik $(var) substitution) + external (SBC/varbridge.js)
+  Marker comment below is REQUIRED by RouterOS — do NOT remove.
+-->
+<!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AIRCOINS NETFI — Piso WiFi</title>
+
+<!-- Config (must load first — globals read by core.js) -->
+<script src="assets/js/config.js"></script>
+
+<!-- Bootstrap 4 + jQuery -->
+<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/popper.min.js"></script>
+<script src="assets/js/bootstrap.min.js"></script>
+
+<!-- Portal CSS -->
+<link rel="stylesheet" href="css/style.css">
+
+<!-- varbridge.js — dual-mode detection (runs early to patch DOM) -->
+<script src="js/varbridge.js"></script>
+</head>
+<body>
+
+<div class="piso-container">
+
+    <!-- ── Banner ──────────────────────────────────────────────────────── -->
+    <div class="piso-banner">
+        <img src="assets/MainPic.PNG" alt="AIRCOINS NETFI">
+        <h1>AIRCOINS NETFI</h1>
+        <p>Piso WiFi Portal</p>
+    </div>
+
+    <!-- ── Status Card ─────────────────────────────────────────────────── -->
+    <div class="piso-status-card">
+        <div class="piso-status-label">Status</div>
+        <div class="piso-status-value disconnected" id="statusText">DISCONNECTED</div>
+        <div class="piso-info-row">
+            <span>MAC: <strong id="macDisplay">$(mac)</strong></span>
+            <span>IP: <strong id="ipDisplay">$(ip)</strong></span>
+        </div>
+    </div>
+
+    <!-- ── Vendo Select ────────────────────────────────────────────────── -->
+    <div class="piso-vendo-select" id="vendoSelectDiv">
+        <label for="vendoSelected">Coin Slot</label>
+        <select id="vendoSelected">
+            <option value="" disabled selected>Loading...</option>
+        </select>
+    </div>
+
+    <!-- ── Voucher Input ───────────────────────────────────────────────── -->
+    <div class="piso-voucher-row">
+        <input type="text" id="voucherInput" placeholder="Enter voucher code" autocomplete="off">
+        <button class="piso-btn piso-btn-primary" id="connectBtn" style="width:auto;padding:12px 24px;">CONNECT</button>
+    </div>
+
+    <!-- ── Action Buttons ──────────────────────────────────────────────── -->
+    <div class="piso-actions">
+        <button class="piso-btn piso-btn-coin" id="insertBtn">INSERT COIN</button>
+        <button class="piso-btn piso-btn-secondary" id="promoRateBtn">VIEW RATES</button>
+        <button class="piso-btn piso-btn-secondary" id="generateVoucherBtn">GET FREE VOUCHER</button>
+    </div>
+
+    <hr class="piso-divider">
+
+    <!-- ── Member Login ────────────────────────────────────────────────── -->
+    <div style="text-align:center;">
+        <button class="piso-btn piso-btn-secondary" id="memberLoginBtn" style="max-width:200px;margin:0 auto;">MEMBER LOGIN</button>
+    </div>
+
+    <!-- ── Footer ──────────────────────────────────────────────────────── -->
+    <div class="piso-footer">
+        Powered by <strong>AIRCOINS NETFI</strong>
+    </div>
+
+</div><!-- /.piso-container -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HIDDEN FORM — CHAP login submission (router-native mode)
+     In external mode, varbridge.js patches the action to the router URL.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<form id="sendin" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
+    <input type="hidden" name="dst" value="$(link-orig)">
+    <input type="hidden" name="popup" value="true">
+    <input type="hidden" name="username" value="">
+    <input type="hidden" name="password" value="">
+</form>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MEMBER LOGIN FORM — PAP submission
+     ═══════════════════════════════════════════════════════════════════════ -->
+<form id="memberForm" name="memberForm" action="$(link-login-only)" method="post" style="display:none;">
+    <input type="hidden" name="dst" value="$(link-orig)">
+    <input type="hidden" name="popup" value="true">
+    <input type="hidden" name="username" value="">
+    <input type="hidden" name="password" value="">
+</form>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MIKROTIK CHAP SCRIPT — only rendered in router-native mode
+     ═══════════════════════════════════════════════════════════════════════ -->
+$(if chap-id)
+<script src="md5.js"></script>
+$(endif)
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CORE JS — portal logic (vendo, voucher, login)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script src="assets/js/core.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODALS
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Insert Coin Modal ───────────────────────────────────────────────── -->
+<div class="modal fade" id="insertCoinModal" tabindex="-1" role="dialog" data-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Insert Coin</h5>
+                <button type="button" class="close" data-dismiss="modal" onclick="doCancelTopUp()"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="piso-coin-display">
+                    <div class="piso-coin-amount" id="totalCoin">0</div>
+                    <div class="piso-coin-label">Coins Inserted</div>
+                    <div class="piso-coin-time" id="totalTime">0 min</div>
+                </div>
+                <div class="piso-coin-anim">
+                    <img src="assets/insert-coin-animation.gif" alt="Insert Coin">
+                </div>
+                <div class="piso-voucher-code" id="codeGenerated" style="display:none;">
+                    <span id="voucherCodeText"></span>
+                </div>
+                <input type="hidden" id="expectedCoin" value="0">
+            </div>
+            <div class="modal-footer">
+                <button class="piso-btn piso-btn-secondary" id="cancelTopUpBtn" style="flex:1;">CANCEL</button>
+                <button class="piso-btn piso-btn-success" id="convertVoucherCode" style="flex:1;display:none;">USE VOUCHER</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Promo Rate Modal ────────────────────────────────────────────────── -->
+<div class="modal fade" id="promoRateModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Promo Rates</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div id="promoRateList">
+                    <!-- Populated by core.js populatePromoRates() -->
+                    <p style="text-align:center;color:#78909C;">Select a coin slot to view rates.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Member Login Modal ──────────────────────────────────────────────── -->
+<div class="modal fade" id="memberLoginModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Member Login</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="piso-member-field">
+                    <label for="memberUser">Username</label>
+                    <input type="text" id="memberUser" placeholder="Enter username" autocomplete="off">
+                </div>
+                <div class="piso-member-field">
+                    <label for="memberPass">Password</label>
+                    <input type="password" id="memberPass" placeholder="Enter password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="piso-btn piso-btn-primary" id="memberLoginSubmit" style="flex:1;">LOGIN</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     LOGIN ERROR — MikroTik error variable
+     ═══════════════════════════════════════════════════════════════════════ -->
+$(if error)
+<script>
+    var loginError = "$(error)";
+</script>
+$(endif)
+
+</body>
+</html>

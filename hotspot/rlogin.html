@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Re-Login Page
+  Shown when re-authentication is required (e.g. session expired, walled garden).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AIRCOINS NETFI — Re-Login</title>
+
+<script src="assets/js/config.js"></script>
+<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/popper.min.js"></script>
+<script src="assets/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/varbridge.js"></script>
+
+<meta http-equiv="refresh" content="0; url=$(link-login)">
+<script>
+    location.replace("$(link-login)");
+</script>
+</head>
+<body>
+<p>Redirecting to login...</p>
+</body>
+</html>

@@ -1,0 +1,438 @@
+/*
+ * AIRCOINS NETFI — Piso WiFi Portal Styles
+ *
+ * Namespaced under .piso-* to avoid Bootstrap conflicts.
+ * Color palette: teal #00BCD4 / pink #E91E63 / dark #263238
+ */
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #263238 0%, #37474F 100%);
+    color: #ECEFF1;
+    min-height: 100vh;
+}
+
+/* ── Container ─────────────────────────────────────────────────────────────── */
+.piso-container {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Banner ────────────────────────────────────────────────────────────────── */
+.piso-banner {
+    text-align: center;
+    padding: 20px 0 10px;
+}
+
+.piso-banner img {
+    max-width: 180px;
+    height: auto;
+    margin-bottom: 8px;
+}
+
+.piso-banner h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #00BCD4;
+    margin: 0;
+    letter-spacing: 1px;
+}
+
+.piso-banner p {
+    font-size: 12px;
+    color: #90A4AE;
+    margin: 4px 0 0;
+}
+
+/* ── Status Card ───────────────────────────────────────────────────────────── */
+.piso-status-card {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+    text-align: center;
+}
+
+.piso-status-label {
+    font-size: 13px;
+    color: #90A4AE;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.piso-status-value {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.piso-status-value.disconnected { color: #E91E63; }
+.piso-status-value.connected    { color: #4CAF50; }
+
+.piso-info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #78909C;
+}
+
+.piso-info-row span { flex: 1; text-align: center; }
+
+/* ── Timer ─────────────────────────────────────────────────────────────────── */
+.piso-timer {
+    text-align: center;
+    padding: 16px 0;
+}
+
+.piso-timer-display {
+    font-size: 48px;
+    font-weight: 700;
+    color: #00BCD4;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+}
+
+.piso-timer-label {
+    font-size: 11px;
+    color: #78909C;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+/* ── Vendo Select ──────────────────────────────────────────────────────────── */
+.piso-vendo-select {
+    margin: 12px 0;
+}
+
+.piso-vendo-select label {
+    display: block;
+    font-size: 12px;
+    color: #90A4AE;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.piso-vendo-select select {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #455A64;
+    background: #37474F;
+    color: #ECEFF1;
+    font-size: 14px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2390A4AE' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.piso-vendo-select select:focus {
+    border-color: #00BCD4;
+}
+
+/* ── Action Buttons ────────────────────────────────────────────────────────── */
+.piso-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.piso-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.piso-btn:active { transform: scale(0.97); }
+.piso-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.piso-btn-primary {
+    background: linear-gradient(135deg, #00BCD4, #0097A7);
+    color: #fff;
+}
+.piso-btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #00ACC1, #00838F);
+}
+
+.piso-btn-coin {
+    background: linear-gradient(135deg, #E91E63, #C2185B);
+    color: #fff;
+}
+.piso-btn-coin:hover:not(:disabled) {
+    background: linear-gradient(135deg, #D81B60, #AD1457);
+}
+
+.piso-btn-secondary {
+    background: rgba(255,255,255,0.08);
+    color: #B0BEC5;
+    border: 1px solid #455A64;
+}
+.piso-btn-secondary:hover:not(:disabled) {
+    background: rgba(255,255,255,0.12);
+    color: #ECEFF1;
+}
+
+.piso-btn-success {
+    background: linear-gradient(135deg, #4CAF50, #388E3C);
+    color: #fff;
+}
+
+/* ── Voucher Input ─────────────────────────────────────────────────────────── */
+.piso-voucher-row {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.piso-voucher-row input {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid #455A64;
+    background: #37474F;
+    color: #ECEFF1;
+    font-size: 16px;
+    outline: none;
+    letter-spacing: 1px;
+}
+
+.piso-voucher-row input:focus {
+    border-color: #00BCD4;
+}
+
+.piso-voucher-row input::placeholder {
+    color: #607D8B;
+}
+
+/* ── Divider ───────────────────────────────────────────────────────────────── */
+.piso-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 16px 0;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+.piso-footer {
+    text-align: center;
+    padding: 16px 0;
+    margin-top: auto;
+    font-size: 11px;
+    color: #546E7A;
+}
+
+.piso-footer a {
+    color: #00BCD4;
+    text-decoration: none;
+}
+
+/* ── Modal Overrides ───────────────────────────────────────────────────────── */
+.modal-content {
+    background: #263238;
+    border: 1px solid #37474F;
+    border-radius: 16px;
+    color: #ECEFF1;
+}
+
+.modal-header {
+    border-bottom-color: #37474F;
+}
+
+.modal-header .modal-title {
+    color: #00BCD4;
+    font-weight: 600;
+}
+
+.modal-header .close {
+    color: #90A4AE;
+    text-shadow: none;
+    opacity: 1;
+}
+
+.modal-body { padding: 20px; }
+
+.modal-footer {
+    border-top-color: #37474F;
+}
+
+/* ── Insert Coin Modal ─────────────────────────────────────────────────────── */
+.piso-coin-display {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.piso-coin-amount {
+    font-size: 56px;
+    font-weight: 700;
+    color: #FFC107;
+    line-height: 1;
+}
+
+.piso-coin-label {
+    font-size: 13px;
+    color: #90A4AE;
+    margin-top: 8px;
+    text-transform: uppercase;
+}
+
+.piso-coin-time {
+    font-size: 28px;
+    font-weight: 600;
+    color: #00BCD4;
+    margin-top: 12px;
+}
+
+.piso-coin-anim {
+    text-align: center;
+    margin: 12px 0;
+}
+
+.piso-coin-anim img {
+    max-width: 120px;
+    height: auto;
+}
+
+/* ── Promo Rate Items ──────────────────────────────────────────────────────── */
+.promo-rate-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    margin: 6px 0;
+    background: rgba(0,188,212,0.08);
+    border-radius: 8px;
+    border: 1px solid rgba(0,188,212,0.15);
+}
+
+.promo-coins {
+    font-size: 18px;
+    font-weight: 700;
+    color: #FFC107;
+}
+
+.promo-coins small {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    color: #90A4AE;
+    text-transform: uppercase;
+}
+
+.promo-time {
+    font-size: 22px;
+    font-weight: 600;
+    color: #00BCD4;
+}
+
+.promo-time small {
+    font-size: 12px;
+    font-weight: 400;
+    color: #78909C;
+    margin-left: 2px;
+}
+
+/* ── Generated Voucher Code ────────────────────────────────────────────────── */
+.piso-voucher-code {
+    text-align: center;
+    padding: 16px;
+    margin: 12px 0;
+    background: rgba(76,175,80,0.1);
+    border: 1px dashed #4CAF50;
+    border-radius: 10px;
+}
+
+.piso-voucher-code span {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    color: #4CAF50;
+    letter-spacing: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+/* ── Member Login ──────────────────────────────────────────────────────────── */
+.piso-member-field {
+    margin: 12px 0;
+}
+
+.piso-member-field label {
+    display: block;
+    font-size: 12px;
+    color: #90A4AE;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.piso-member-field input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #455A64;
+    background: #37474F;
+    color: #ECEFF1;
+    font-size: 14px;
+    outline: none;
+}
+
+.piso-member-field input:focus {
+    border-color: #00BCD4;
+}
+
+/* ── Status Page ───────────────────────────────────────────────────────────── */
+.piso-session-info {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 10px 0;
+}
+
+.piso-session-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.piso-session-row:last-child { border-bottom: none; }
+
+.piso-session-key {
+    color: #78909C;
+    font-size: 13px;
+}
+
+.piso-session-val {
+    color: #ECEFF1;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 360px) {
+    .piso-timer-display { font-size: 36px; }
+    .piso-coin-amount { font-size: 42px; }
+    .piso-btn { font-size: 13px; padding: 12px 16px; }
+}

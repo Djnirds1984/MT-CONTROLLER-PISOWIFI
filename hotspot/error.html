@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Error Page
+  Shown when a hotspot error occurs (auth failure, timeout, etc.)
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AIRCOINS NETFI — Error</title>
+
+<script src="assets/js/config.js"></script>
+<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/popper.min.js"></script>
+<script src="assets/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/varbridge.js"></script>
+</head>
+<body>
+
+<div class="piso-container">
+
+    <div class="piso-banner">
+        <img src="assets/MainPic.PNG" alt="AIRCOINS NETFI">
+        <h1>AIRCOINS NETFI</h1>
+        <p>Piso WiFi Portal</p>
+    </div>
+
+    <div class="piso-status-card">
+        <div class="piso-status-label">Error</div>
+        <div class="piso-status-value disconnected">CONNECTION FAILED</div>
+    </div>
+
+    <div style="text-align:center;padding:30px 0;">
+        <p style="color:#E91E63;font-size:16px;">$(error)</p>
+        <p style="color:#78909C;font-size:13px;">Please try again or contact the administrator.</p>
+    </div>
+
+    <div class="piso-actions">
+        <a href="$(link-login-only)?mac=$(mac)&ip=$(ip)" class="piso-btn piso-btn-primary">TRY AGAIN</a>
+    </div>
+
+    <div class="piso-footer">
+        Powered by <strong>AIRCOINS NETFI</strong>
+    </div>
+
+</div>
+
+</body>
+</html>

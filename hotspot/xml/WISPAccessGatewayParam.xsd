@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <xs:element name="WISPAccessGatewayParam">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="Redirect" type="RedirectType"/>
+        <xs:element name="AccessResponse" type="AccessResponseType"/>
+        <xs:element name="LogoffResponse" type="LogoffResponseType"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="RedirectType">
+    <xs:all>
+      <xs:element name="MessageType" type="xs:integer"/>
+      <xs:element name="ResponseCode" type="xs:integer"/>
+      <xs:element name="AccessProcedure" type="xs:string" minOccurs="0"/>
+      <xs:element name="AccessLocation" type="xs:string" minOccurs="0"/>
+      <xs:element name="LocationName" type="xs:string" minOccurs="0"/>
+      <xs:element name="LoginURL" type="xs:string"/>
+      <xs:element name="AbortLoginURL" type="xs:string"/>
+    </xs:all>
+  </xs:complexType>
+
+  <xs:complexType name="AccessResponseType">
+    <xs:all>
+      <xs:element name="MessageType" type="xs:integer"/>
+      <xs:element name="ResponseCode" type="xs:integer"/>
+      <xs:element name="ReplyMessage" type="xs:string" minOccurs="0"/>
+      <xs:element name="AccessPeriod" type="xs:integer" minOccurs="0"/>
+      <xs:element name="LogoffURL" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+
+  <xs:complexType name="LogoffResponseType">
+    <xs:all>
+      <xs:element name="MessageType" type="xs:integer"/>
+      <xs:element name="ResponseCode" type="xs:integer"/>
+      <xs:element name="ReplyMessage" type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+
+</xs:schema>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Logout Page
+  Shown after user is logged out (session expired, manual logout).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AIRCOINS NETFI — Disconnected</title>
+
+<script src="assets/js/config.js"></script>
+<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/popper.min.js"></script>
+<script src="assets/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/varbridge.js"></script>
+</head>
+<body>
+
+<div class="piso-container">
+
+    <div class="piso-banner">
+        <img src="assets/MainPic.PNG" alt="AIRCOINS NETFI">
+        <h1>AIRCOINS NETFI</h1>
+        <p>Piso WiFi Portal</p>
+    </div>
+
+    <div class="piso-status-card">
+        <div class="piso-status-label">Status</div>
+        <div class="piso-status-value disconnected">DISCONNECTED</div>
+        <div class="piso-info-row">
+            <span>MAC: <strong>$(mac)</strong></span>
+            <span>IP: <strong>$(ip)</strong></span>
+        </div>
+    </div>
+
+    <div style="text-align:center;padding:30px 0;">
+        <p style="color:#90A4AE;font-size:16px;">You have been logged out.</p>
+        <p style="color:#78909C;font-size:13px;">Your session has ended. Insert a coin or enter a voucher to reconnect.</p>
+    </div>
+
+    <div class="piso-actions">
+        <a href="$(link-login-only)?mac=$(mac)&ip=$(ip)" class="piso-btn piso-btn-primary">LOG IN AGAIN</a>
+    </div>
+
+    <div class="piso-footer">
+        Powered by <strong>AIRCOINS NETFI</strong>
+    </div>
+
+</div>
+
+</body>
+</html>

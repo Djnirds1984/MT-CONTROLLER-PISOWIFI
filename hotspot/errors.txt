@@ -1,0 +1,3 @@
+# AIRCOINS NETFI — Error Messages
+# MikroTik hotspot error code mappings
+# Format: error_code=display_message

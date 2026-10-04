@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  AIRCOINS NETFI — Advertisement / Redirect Page
+  Shown between login and status (MikroTik redirect advert).
+  Auto-redirects to the status page after a short delay.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AIRCOINS NETFI — Connecting...</title>
+
+<script src="assets/js/config.js"></script>
+<link rel="stylesheet" href="assets/css/bootstrap.min.css">
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/popper.min.js"></script>
+<script src="assets/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/varbridge.js"></script>
+
+<meta http-equiv="refresh" content="5; url=$(link-redirect)">
+<script>
+    setTimeout(function () {
+        location.replace("$(link-redirect)");
+    }, 5000);
+</script>
+</head>
+<body>
+
+<div class="piso-container">
+
+    <div class="piso-banner">
+        <img src="assets/MainPic.PNG" alt="AIRCOINS NETFI">
+        <h1>AIRCOINS NETFI</h1>
+        <p>Piso WiFi Portal</p>
+    </div>
+
+    <div class="piso-status-card">
+        <div class="piso-status-label">Status</div>
+        <div class="piso-status-value connected">CONNECTING...</div>
+    </div>
+
+    <div style="text-align:center;padding:30px 0;">
+        <p style="color:#90A4AE;font-size:16px;">Welcome to AIRCOINS NETFI</p>
+        <p style="color:#78909C;font-size:13px;">You will be redirected to your session shortly...</p>
+    </div>
+
+    <div class="piso-footer">
+        Powered by <strong>AIRCOINS NETFI</strong>
+    </div>
+
+</div>
+
+</body>
+</html>
