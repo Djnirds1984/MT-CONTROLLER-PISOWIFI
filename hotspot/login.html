@@ -198,8 +198,9 @@
     if (params.mac) document.getElementById("macDisplay").textContent = params.mac;
     if (params.ip)  document.getElementById("ipDisplay").textContent  = params.ip;
 
-    // ── Build the SBC status page URL (used as form dst for post-login redirect) ──
-    var statusUrl = "status.html?mac=" + encodeURIComponent(params.mac || "")
+    // ── Build the SBC status page URL (absolute — router redirects here after login) ─
+    var sbcBase = (typeof sbcApiUrl !== "undefined" && sbcApiUrl) ? sbcApiUrl : "";
+    var statusUrl = sbcBase + "/status.html?mac=" + encodeURIComponent(params.mac || "")
                   + "&ip="  + encodeURIComponent(params.ip  || "")
                   + "&user=" + encodeURIComponent(params.user || "");
 

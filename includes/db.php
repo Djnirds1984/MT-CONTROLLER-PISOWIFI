@@ -181,6 +181,13 @@ SQL);
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_vendo_rates_vendo ON vendo_rates (vendo_id)');
 
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+)
+SQL);
+
     // Migration: add new columns to existing vendo_devices tables that were
     // created before the card-settings refactor.
     $cols = [];
@@ -202,4 +209,39 @@ SQL);
             try { $pdo->exec($ddl); } catch (Throwable $e) { /* ignore */ }
         }
     }
+}
+
+/**
+ * Read a single setting value by key. Returns $default when missing.
+ *
+ * @param PDO    $pdo     Database connection.
+ * @param string $key     Setting key.
+ * @param string $default Fallback value.
+ * @return string
+ */
+function aircoins_get_setting(PDO $pdo, string $key, string $default = ''): string
+{
+    try {
+        $stmt = $pdo->prepare('SELECT value FROM settings WHERE key = :k');
+        $stmt->execute([':k' => $key]);
+        $row = $stmt->fetch();
+        return $row ? (string) $row['value'] : $default;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+/**
+ * Write a setting (insert or update).
+ *
+ * @param PDO    $pdo   Database connection.
+ * @param string $key   Setting key.
+ * @param string $value Setting value.
+ */
+function aircoins_set_setting(PDO $pdo, string $key, string $value): void
+{
+    $pdo->prepare(
+        'INSERT INTO settings (key, value) VALUES (:k, :v)'
+        . ' ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    )->execute([':k' => $key, ':v' => $value]);
 }

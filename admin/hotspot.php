@@ -282,6 +282,45 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit;
     }
 
+    // ---- save RADIUS settings ----------------------------------------------
+    if ($action === 'save_radius') {
+        $radiusAddress = trim((string) ($_POST['radius_address'] ?? ''));
+        $radiusSecret  = trim((string) ($_POST['radius_secret'] ?? ''));
+        $radiusAuthPort = max(1, min(65535, (int) ($_POST['radius_auth_port'] ?? 1812)));
+        $radiusAcctPort = max(1, min(65535, (int) ($_POST['radius_acct_port'] ?? 1813)));
+        $radiusTimeout  = max(1, min(30, (int) ($_POST['radius_timeout'] ?? 3)));
+
+        // Save to local settings DB
+        try {
+            aircoins_set_setting($pdo, 'radius_address', $radiusAddress);
+            aircoins_set_setting($pdo, 'radius_secret', $radiusSecret);
+            aircoins_set_setting($pdo, 'radius_auth_port', (string) $radiusAuthPort);
+            aircoins_set_setting($pdo, 'radius_acct_port', (string) $radiusAcctPort);
+            aircoins_set_setting($pdo, 'radius_timeout', (string) $radiusTimeout);
+            aircoins_audit($pdo, $adminId, 'radius_settings_save', 'address=' . $radiusAddress . ' auth=' . $radiusAuthPort);
+        } catch (Throwable $e) {
+            aircoins_flash('error', 'Failed to save RADIUS settings: ' . $e->getMessage());
+            header($back . '#radius');
+            exit;
+        }
+
+        // Push to router if connected
+        $pushMsg = '';
+        if ($router) {
+            try {
+                $client = aircoins_router_client($router);
+                $client->setRadiusServer($radiusAddress, $radiusSecret, $radiusAuthPort, $radiusAcctPort, $radiusTimeout);
+                $pushMsg = ' RADIUS config pushed to router "' . $router['name'] . '".';
+            } catch (Throwable $e) {
+                $pushMsg = ' (Router push failed: ' . $e->getMessage() . ')';
+            }
+        }
+
+        aircoins_flash('success', 'RADIUS settings saved.' . $pushMsg);
+        header($back . '#radius');
+        exit;
+    }
+
     // Unknown action.
     aircoins_flash('error', 'Unknown action.');
     header($back);
@@ -308,14 +347,30 @@ try {
 }
 
 // Load sessions and profiles from router (still router-managed)
+$radiusServers = [];
 if ($router) {
     try {
         $client = aircoins_router_client($router);
         try { $sessions = $client->activeSessions(); } catch (Throwable $e) { $sessions = []; if ($banner === '') { $banner = 'Could not load active sessions: ' . $e->getMessage(); } }
         try { $profiles = $client->hotspotProfiles(); } catch (Throwable $e) { $profiles = []; if ($banner === '') { $banner = 'Could not load hotspot profiles: ' . $e->getMessage(); } }
+        try { $radiusServers = $client->radiusServers(); } catch (Throwable $e) { $radiusServers = []; }
     } catch (Throwable $e) {
         if ($banner === '') { $banner = 'Cannot reach router "' . (string) $router['name'] . '": ' . $e->getMessage(); }
     }
+}
+
+// Load RADIUS settings from local DB
+$radiusAddress    = aircoins_get_setting($pdo, 'radius_address', '10.0.0.252');
+$radiusSecret     = aircoins_get_setting($pdo, 'radius_secret', 'aircoins_secret');
+$radiusAuthPort   = (int) aircoins_get_setting($pdo, 'radius_auth_port', '1812');
+$radiusAcctPort   = (int) aircoins_get_setting($pdo, 'radius_acct_port', '1813');
+$radiusTimeout    = (int) aircoins_get_setting($pdo, 'radius_timeout', '3');
+
+// Check FreeRADIUS service status (local SBC)
+$freeradiusRunning = false;
+if (function_exists('shell_exec')) {
+    $frStatus = @shell_exec('systemctl is-active freeradius 2>/dev/null');
+    $freeradiusRunning = (trim($frStatus ?? '') === 'active');
 }
 
 // Consume a voucher batch result (PRG).
@@ -363,6 +418,7 @@ aircoins_header('Hotspot', 'hotspot');
     <button class="tab is-active" type="button" data-tab="users">Users &amp; Vouchers</button>
     <button class="tab" type="button" data-tab="sessions">Active Sessions <span class="badge badge--idle" style="margin-left:6px"><?php echo count($sessions); ?></span></button>
     <button class="tab" type="button" data-tab="profiles">Profiles <span class="badge badge--idle" style="margin-left:6px"><?php echo count($profiles); ?></span></button>
+    <button class="tab" type="button" data-tab="radius">RADIUS</button>
   </div>
 
   <!-- ============================ USERS ============================ -->
@@ -683,6 +739,104 @@ aircoins_header('Hotspot', 'hotspot');
           </div>
         <?php endif; ?>
       </div>
+    </div>
+  </section>
+
+  <!-- ============================ RADIUS ============================ -->
+  <section class="tabpanel" data-panel="radius" hidden>
+    <div class="grid grid--2" style="align-items:start">
+
+      <!-- RADIUS Settings Form -->
+      <div class="card">
+        <div class="card__head"><h2 class="card__title">RADIUS Server Settings</h2></div>
+        <div class="card__body">
+          <form method="post" action="hotspot.php" autocomplete="off">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="action" value="save_radius">
+            <div class="field">
+              <label for="r-address">RADIUS Server Address</label>
+              <input class="input" id="r-address" name="radius_address" type="text" value="<?php echo e($radiusAddress); ?>" required>
+              <span class="hint">IP address of the SBC running FreeRADIUS</span>
+            </div>
+            <div class="field">
+              <label for="r-secret">Shared Secret</label>
+              <input class="input" id="r-secret" name="radius_secret" type="text" value="<?php echo e($radiusSecret); ?>" required>
+              <span class="hint">Must match /etc/freeradius/3.0/clients.conf on the SBC</span>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="r-auth-port">Auth Port</label>
+                <input class="input input--mono" id="r-auth-port" name="radius_auth_port" type="number" min="1" max="65535" value="<?php echo (int) $radiusAuthPort; ?>">
+              </div>
+              <div class="field">
+                <label for="r-acct-port">Accounting Port</label>
+                <input class="input input--mono" id="r-acct-port" name="radius_acct_port" type="number" min="1" max="65535" value="<?php echo (int) $radiusAcctPort; ?>">
+              </div>
+              <div class="field">
+                <label for="r-timeout">Timeout (sec)</label>
+                <input class="input input--mono" id="r-timeout" name="radius_timeout" type="number" min="1" max="30" value="<?php echo (int) $radiusTimeout; ?>">
+              </div>
+            </div>
+            <button class="btn btn--primary btn--block" type="submit">Save &amp; Push to Router</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- RADIUS Status -->
+      <div>
+        <!-- FreeRADIUS Service Status -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card__head"><h2 class="card__title">FreeRADIUS Service (SBC)</h2></div>
+          <div class="card__body">
+            <div class="row" style="align-items:center;gap:12px">
+              <span class="badge <?php echo $freeradiusRunning ? 'badge--rest' : 'badge--idle'; ?>" style="font-size:14px;padding:8px 16px">
+                <?php echo $freeradiusRunning ? 'RUNNING' : 'NOT RUNNING'; ?>
+              </span>
+              <span class="hint"><?php echo $freeradiusRunning ? 'FreeRADIUS is active and accepting requests' : 'FreeRADIUS service is not active'; ?></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Router RADIUS Servers -->
+        <div class="card">
+          <div class="card__head">
+            <h2 class="card__title">Router RADIUS Servers</h2>
+            <div class="spacer"></div>
+            <span class="hint"><?php echo count($radiusServers); ?> configured</span>
+          </div>
+          <div class="card__body">
+            <?php if ($radiusServers === []): ?>
+              <p class="hint">No RADIUS servers configured on this router.</p>
+            <?php else: ?>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Address</th>
+                    <th>Auth Port</th>
+                    <th>Acct Port</th>
+                    <th>Timeout</th>
+                    <th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($radiusServers as $rs): ?>
+                  <tr>
+                    <td><strong><?php echo e((string) ($rs['service'] ?? '')); ?></strong></td>
+                    <td class="mono"><?php echo e((string) ($rs['address'] ?? '')); ?></td>
+                    <td class="mono"><?php echo e((string) ($rs['authentication-port'] ?? '')); ?></td>
+                    <td class="mono"><?php echo e((string) ($rs['accounting-port'] ?? '')); ?></td>
+                    <td class="mono"><?php echo e((string) ($rs['timeout'] ?? '')); ?></td>
+                    <td><?php echo e((string) ($rs['comment'] ?? '')); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+                </tbody>
+              </table>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 </div>

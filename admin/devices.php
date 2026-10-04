@@ -139,8 +139,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $now = time();
             $ins = $pdo->prepare('INSERT INTO devices (mac_address, ip_address, hostname, status, session_time, first_seen, last_seen, created_at, updated_at) VALUES (:mac, :ip, :host, :status, :st, :now, :now2, :now3, :now4)');
             $ins->execute([':mac' => $mac, ':ip' => $ip, ':host' => $hostname, ':status' => $status, ':st' => $sessTime, ':now' => $now, ':now2' => $now, ':now3' => $now, ':now4' => $now]);
-            aircoins_audit($pdo, $adminId, 'device_add', 'mac=' . $mac);
-            aircoins_flash('success', 'Device "' . $mac . '" added.');
+
+            // Create RADIUS user so the device can authenticate.
+            $pushMsg = '';
+            if ($sessTime !== '') {
+                try {
+                    $radiusPdo = aircoins_radius_db();
+                    aircoins_radius_schema($radiusPdo);
+                    $macUser = str_replace(':', '', strtoupper($mac));
+                    $sessionSeconds = aircoins_parse_time_to_seconds($sessTime);
+                    aircoins_radius_add_user($radiusPdo, $macUser, $macUser, $sessionSeconds, 'device ' . $mac);
+                    $pushMsg = ' RADIUS user created (' . $sessTime . ').';
+                } catch (Throwable $re) {
+                    $pushMsg = ' (RADIUS user creation failed: ' . $re->getMessage() . ')';
+                }
+            }
+
+            aircoins_audit($pdo, $adminId, 'device_add', 'mac=' . $mac . $pushMsg);
+            aircoins_flash('success', 'Device "' . $mac . '" added.' . $pushMsg);
         } catch (Throwable $e) {
             $msg = $e->getMessage();
             if (strpos($msg, 'UNIQUE') !== false || strpos($msg, 'idx_devices_mac') !== false) {
@@ -623,7 +639,7 @@ aircoins_header('Devices', 'devices');
             <input class="input input--mono" id="at-mins" name="add_minutes" type="number" min="0" max="59" value="0" step="1">
           </div>
         </div>
-        <p class="hint" style="margin-top:4px">Time will be added to the device's current session limit on the router.</p>
+        <p class="hint" style="margin-top:4px">Time will be added to the device's current session limit in RADIUS.</p>
       </div>
       <div class="modal__foot">
         <button class="btn btn--ghost" type="button" data-modal-close>Cancel</button>

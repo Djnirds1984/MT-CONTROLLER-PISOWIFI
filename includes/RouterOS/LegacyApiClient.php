@@ -883,4 +883,66 @@ class LegacyApiClient implements RouterClient
         }
         return $out;
     }
+
+    /** @inheritDoc */
+    public function radiusServers(): array
+    {
+        $recs = $this->cmd('/radius/print');
+        $out  = [];
+        foreach ($recs as $r) {
+            $out[] = [
+                '.id'                 => (string) ($r['.id'] ?? ''),
+                'service'             => (string) ($r['service'] ?? ''),
+                'address'             => (string) ($r['address'] ?? ''),
+                'secret'              => (string) ($r['secret'] ?? ''),
+                'authentication-port' => (string) ($r['authentication-port'] ?? '1812'),
+                'accounting-port'     => (string) ($r['accounting-port'] ?? '1813'),
+                'timeout'             => (string) ($r['timeout'] ?? '3s'),
+                'comment'             => (string) ($r['comment'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /** @inheritDoc */
+    public function setRadiusServer(string $address, string $secret, int $authPort = 1812, int $acctPort = 1813, int $timeout = 3): array
+    {
+        // Check if a hotspot RADIUS entry already exists
+        $existing = null;
+        foreach ($this->radiusServers() as $srv) {
+            if ($srv['service'] === 'hotspot') {
+                $existing = $srv;
+                break;
+            }
+        }
+
+        $body = [
+            'service'             => 'hotspot',
+            'address'             => $address,
+            'secret'              => $secret,
+            'authentication-port' => (string) $authPort,
+            'accounting-port'     => (string) $acctPort,
+            'timeout'             => $timeout . 's',
+            'comment'             => 'AIRCOINS SBC FreeRADIUS',
+        ];
+
+        if ($existing && $existing['.id'] !== '') {
+            // Update existing entry
+            $this->cmd('/radius/set', array_merge(['.id' => $existing['.id']], $body));
+            $body['.id'] = $existing['.id'];
+        } else {
+            // Create new entry
+            $this->cmd('/radius/add', $body);
+            // Fetch back to get the assigned .id
+            $list = $this->radiusServers();
+            foreach ($list as $srv) {
+                if ($srv['address'] === $address && $srv['service'] === 'hotspot') {
+                    $body['.id'] = $srv['.id'];
+                    break;
+                }
+            }
+        }
+
+        return $body;
+    }
 }

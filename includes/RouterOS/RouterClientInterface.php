@@ -222,4 +222,27 @@ interface RouterClient
      * @return array<int,array<string,mixed>> Each entry: '.id', 'dst-address', 'action', 'comment'.
      */
     public function walledGarden(): array;
+
+    /**
+     * List RADIUS server entries configured on the router.
+     *
+     * @return array<int,array<string,mixed>> Each entry: '.id', 'service', 'address',
+     *        'secret', 'authentication-port', 'accounting-port', 'timeout', 'comment'.
+     */
+    public function radiusServers(): array;
+
+    /**
+     * Add or update the RADIUS server entry for hotspot authentication.
+     *
+     * If a RADIUS entry with service=hotspot already exists, it is updated;
+     * otherwise a new entry is created.
+     *
+     * @param string $address  RADIUS server IP address.
+     * @param string $secret   Shared secret.
+     * @param int    $authPort Authentication port (default 1812).
+     * @param int    $acctPort Accounting port (default 1813).
+     * @param int    $timeout  Timeout in seconds (default 3).
+     * @return array<string,mixed> The created/updated RADIUS server record.
+     */
+    public function setRadiusServer(string $address, string $secret, int $authPort = 1812, int $acctPort = 1813, int $timeout = 3): array;
 }
