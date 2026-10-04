@@ -396,26 +396,3 @@ SQL;
 
     return $pdo->query($sql)->fetchAll();
 }
-
-/**
- * Convert minutes to a MikroTik-compatible time string.
- *
- * @param  int    $minutes Minutes to convert.
- * @return string          Time string (e.g. "15m", "1h30m", "2h").
- */
-function aircoins_minutes_to_time(int $minutes): string
-{
-    if ($minutes <= 0) {
-        return '0s';
-    }
-    $hours   = intdiv($minutes, 60);
-    $mins    = $minutes % 60;
-    $result  = '';
-    if ($hours > 0) {
-        $result .= $hours . 'h';
-    }
-    if ($mins > 0) {
-        $result .= $mins . 'm';
-    }
-    return $result;
-}

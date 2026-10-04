@@ -383,9 +383,12 @@ RADIUS_DB="${DB_DIR}/radius.db"
 FR_DIR="/etc/freeradius/3.0"
 
 if [ -d "$FR_DIR" ]; then
-    # Ensure the RADIUS DB directory exists with correct ownership
-    mkdir -p "$DB_DIR"
-    chown freerad:freerad "$DB_DIR" 2>/dev/null || chown www-data:www-data "$DB_DIR"
+    # Ensure the RADIUS DB directory exists with correct ownership.
+    # IMPORTANT: keep the parent dir as www-data so PHP-FPM can access
+    # sessions/ and aircoins.db. Only radius.db itself is owned by freerad.
+    mkdir -p "$DB_DIR" "$DB_DIR/sessions"
+    chown -R www-data:www-data "$DB_DIR"
+    chmod 750 "$DB_DIR"; chmod 700 "$DB_DIR/sessions"
 
     # --- Configure the SQL module for SQLite ---
     SQL_CONF="$FR_DIR/mods-enabled/sql"
@@ -453,8 +456,11 @@ CLIENTEOF
         if [ -f "$SCHEMA_SQL" ]; then
             info "Importing FreeRADIUS SQLite schema ..."
             sqlite3 "$RADIUS_DB" < "$SCHEMA_SQL" 2>/dev/null || true
-            chown freerad:freerad "$RADIUS_DB" 2>/dev/null || chown www-data:www-data "$RADIUS_DB"
-            chmod 660 "$RADIUS_DB"
+            # Both PHP (www-data) and FreeRADIUS (freerad) must read/write this file.
+            # Group = www-data, mode 664 => www-data r/w, freerad r/w via group membership.
+            usermod -aG freerad www-data 2>/dev/null || true
+            chown freerad:www-data "$RADIUS_DB"
+            chmod 664 "$RADIUS_DB"
             ok "RADIUS database initialized at $RADIUS_DB"
         else
             warn "Schema file not found at $SCHEMA_SQL — the PHP code will self-heal tables on first use."
