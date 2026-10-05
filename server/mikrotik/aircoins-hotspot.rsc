@@ -53,11 +53,12 @@
 /ip/hotspot/walled-garden/ip add action=accept dst-address=$SBCIP \
     protocol=tcp dst-port=80 comment="aircoins"
 #    Coin insertion runs on the portal page BEFORE login and talks
-#    straight to each vendo's NodeMCU on the LAN; accept the whole LAN
-#    (tcp) so no vendo needs its own rule. Edit LANNET if yours differs.
-:local LANNET "10.0.0.0/24"
-/ip/hotspot/walled-garden/ip add action=accept dst-address=$LANNET \
-    protocol=tcp comment="aircoins"
+#    straight to each vendo's NodeMCU: add ONE accept rule per vendo IP.
+#    NEVER accept the whole LAN subnet — if the rule covers the router's
+#    own hotspot address, the login page bypasses the hotspot and the
+#    router's www answers 403 Forbidden instead (verified on-device).
+#    Example: /ip/hotspot/walled-garden/ip add action=accept \
+#        dst-address=10.0.0.50 protocol=tcp comment="aircoins"
 
 # 5. The SBC itself never gets hotspot-redirected.
 /ip/hotspot/ip-binding remove [find where comment="aircoins"]
