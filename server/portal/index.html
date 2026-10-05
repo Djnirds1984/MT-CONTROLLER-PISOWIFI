@@ -49,10 +49,13 @@
   <p class="piso-meta" id="clientInfo"></p>
 </div>
 
-<!-- Real top-level form navigation to the router login (PAP). -->
+<!-- Real top-level form navigation to the router login (PAP).
+     app.js fills the action from the link-login query param on page
+     load, then primes dst/mac/username/password before submitting. -->
 <form id="sendin" method="post" action="">
   <input type="hidden" name="dst">
   <input type="hidden" name="popup" value="false">
+  <input type="hidden" name="mac">
   <input type="hidden" name="username">
   <input type="hidden" name="password">
 </form>

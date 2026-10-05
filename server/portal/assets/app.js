@@ -1,9 +1,10 @@
 /* AIRCOINS NETFI portal logic (vanilla JS, no dependencies).
  *
  * Page context arrives via query params written by the router-side
- * redirector stubs: mac, ip, error, login, dst. There are deliberately
- * NO RouterOS $(var) template tags in this tree — the portal is served
- * by lighttpd on the SBC.
+ * redirector stubs: mac, ip, error, link-login (older aliases: login,
+ * link-login-only), dst. There are deliberately NO RouterOS $(var)
+ * template tags in this tree — the portal is served by lighttpd on
+ * the SBC.
  */
 (function () {
   'use strict';
@@ -11,7 +12,8 @@
   var Q = new URLSearchParams(location.search);
   var MAC = (Q.get('mac') || '').replace(/[^0-9a-fA-F]/g, '').toUpperCase();
   var IP = Q.get('ip') || '';
-  var LOGIN_URL = Q.get('login') || '';
+  var LOGIN_URL = normalizeLoginURL(
+    Q.get('link-login') || Q.get('login') || Q.get('link-login-only'));
   var ERROR = Q.get('error') || '';
   var LOGGED_OUT = Q.get('logged_out') === '1';
 
@@ -33,6 +35,46 @@
 
   /* ---- login submission: real top-level form POST (router PAP) ------- */
 
+  /* normalizeLoginURL validates the router login URL arriving in the
+   * query string (link-login, or the older login / link-login-only
+   * aliases) and returns scheme://host:port/path with any query and
+   * fragment dropped: link-login ships as the full ".../login?dst=..."
+   * URL, but the form action must be the bare login endpoint. Returns
+   * '' when the value is unusable. */
+  function normalizeLoginURL(raw) {
+    raw = (raw || '').trim();
+    if (!/^https?:\/\//i.test(raw)) { return ''; }
+    try {
+      var u = new URL(raw);
+      return u.origin + u.pathname;
+    } catch (e) {
+      return raw;
+    }
+  }
+
+  /* statusDst is the post-login landing page: the SBC session status
+   * page, carrying mac/ip so it renders device details immediately.
+   * The router sends the browser here after a successful login. */
+  function statusDst() {
+    var dst = location.origin + '/status.html';
+    var extra = [];
+    if (MAC) { extra.push('mac=' + encodeURIComponent(MAC)); }
+    if (IP) { extra.push('ip=' + encodeURIComponent(IP)); }
+    if (extra.length) { dst += '?' + extra.join('&'); }
+    return dst;
+  }
+
+  /* primeForm fills the hidden sendin form on page load so the action
+   * (router login URL) and the dst/mac fields are already populated
+   * when inspected in the browser, before the first submit. */
+  function primeForm() {
+    var f = $('sendin');
+    if (LOGIN_URL) { f.action = LOGIN_URL; }
+    f.elements.dst.value = statusDst();
+    var m = f.elements.mac;
+    if (m) { m.value = MAC; }
+  }
+
   function submitLogin(username, password) {
     if (!LOGIN_URL) {
       show($('errBox'), 'Login URL missing. Open this page from the WiFi portal.', true);
@@ -41,13 +83,13 @@
     var f = $('sendin');
     f.action = LOGIN_URL;
     f.elements.username.value = username;
+    /* Password mirrors the username: RADIUS vouchers and MAC users are
+     * provisioned with Cleartext-Password == username, so an empty
+     * password would be rejected by FreeRADIUS. */
     f.elements.password.value = password;
-    var dst = location.origin + '/status.html';
-    var extra = [];
-    if (MAC) { extra.push('mac=' + encodeURIComponent(MAC)); }
-    if (IP) { extra.push('ip=' + encodeURIComponent(IP)); }
-    if (extra.length) { dst += '?' + extra.join('&'); }
-    f.elements.dst.value = dst;
+    f.elements.dst.value = statusDst();
+    var m = f.elements.mac;
+    if (m) { m.value = MAC; }
     f.submit();
   }
 
@@ -191,6 +233,7 @@
   /* ---- init ------------------------------------------------------------ */
 
   document.addEventListener('DOMContentLoaded', function () {
+    primeForm();
     if (LOGGED_OUT) {
       show($('infoBox'), 'You are logged out. Buy a new code or insert coins to reconnect.', false);
     }

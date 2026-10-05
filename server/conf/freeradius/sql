@@ -22,6 +22,14 @@ sql {
 	# source IP — NOT in the database.
 	read_clients = no
 
+	# REQUIRED: this directive is the ONLY source of SQL-User-Name in
+	# FreeRADIUS 3.x. Every query below matches on '%{SQL-User-Name}';
+	# if this line is absent/empty the variable expands to "" so lookups
+	# hit username = '' and return notfound (no Cleartext-Password is
+	# loaded, pap cannot set Auth-Type, and the user is rejected). Prefer
+	# Stripped-User-Name, fall back to User-Name, then DEFAULT.
+	sql_user_name = "%{%{Stripped-User-Name}:-%{%{User-Name}:-DEFAULT}}"
+
 	# Table names are hardcoded in queries below (FreeRADIUS 3.2.x
 	# does not reliably expand ${var} references from nested sub-sections).
 	#   radacct, radpostauth, radcheck, radreply,
