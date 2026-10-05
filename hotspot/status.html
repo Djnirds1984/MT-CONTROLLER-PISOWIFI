@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>AIRCOINS NETFI - Status</title>
+<link rel="stylesheet" href="assets/piso.css">
+</head>
+<body>
+<!-- AIRCOINS NETFI session status — router-native. RouterOS fills the
+     $(var) session tokens for the logged-in client; auto-refreshes
+     every 60s so uptime/time-left stay current. -->
+<div class="piso-wrap">
+
+  <header class="piso-head">
+    <h1 class="piso-brand">AIRCOINS NETFI</h1>
+    <p class="piso-sub">You are online</p>
+  </header>
+
+  <div class="piso-info">Connected as $(username)</div>
+
+  <section class="piso-card">
+    <h2 class="piso-h">Session</h2>
+    <table class="piso-table">
+      <tbody>
+        <tr><td>Device</td><td class="piso-amt">$(mac)</td></tr>
+        <tr><td>IP address</td><td class="piso-amt">$(ip)</td></tr>
+        <tr><td>Online for</td><td class="piso-amt">$(uptime)</td></tr>
+        <tr><td>Time left</td><td class="piso-amt">$(session-time-left)</td></tr>
+        <tr><td>Downloaded</td><td class="piso-amt">$(bytes-in-nice)</td></tr>
+        <tr><td>Uploaded</td><td class="piso-amt">$(bytes-out-nice)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="piso-card">
+    <a class="piso-btn piso-btn-wide" href="$(link-logout)">Logout</a>
+  </section>
+
+  <p class="piso-meta">Buy a new code or insert coins when your time runs out.</p>
+</div>
+</body>
+</html>

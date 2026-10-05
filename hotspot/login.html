@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIRCOINS NETFI</title>
+<link rel="stylesheet" href="assets/piso.css">
+</head>
+<body>
+<!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE -->
+<!-- AIRCOINS NETFI captive portal — router-native, self-contained.
+     Served by RouterOS from flash/hotspot with server-side $(var)
+     substitution. There is NO redirect to the SBC: this page IS the
+     portal. Login = PAP post to $(link-login-only); the router
+     forwards it to FreeRADIUS on the SBC (use-radius=yes, profile
+     login-by=cookie,http-pap). Vendo list / promo rates come from the
+     panel API (http://10.0.0.252/api/vendo) via assets/portal.js. -->
+<div class="piso-wrap">
+
+  <header class="piso-head">
+    <h1 id="brand" class="piso-brand">AIRCOINS NETFI</h1>
+    <p class="piso-sub">Coin-operated WiFi internet</p>
+  </header>
+
+  $(if error)<div class="piso-error">$(error)</div>$(endif)
+  <div id="errBox" class="piso-error" hidden></div>
+
+  <section class="piso-card">
+    <h2 class="piso-h">Voucher code</h2>
+    <div class="piso-row">
+      <input id="codeInput" class="piso-input" autocomplete="off"
+             autocapitalize="characters" placeholder="ENTER CODE">
+      <button id="connectBtn" class="piso-btn" type="button">Connect</button>
+    </div>
+    <p class="piso-hint">Type the code exactly as printed, then press Connect.</p>
+  </section>
+
+  <section class="piso-card">
+    <h2 class="piso-h">Insert coins</h2>
+    <label class="piso-label" for="vendoSelect">Vendo machine</label>
+    <select id="vendoSelect" class="piso-input">
+      <option value="">Loading...</option>
+    </select>
+    <button id="insertBtn" class="piso-btn piso-btn-wide" type="button">Insert coin</button>
+    <div id="coinStatus" class="piso-status" hidden></div>
+  </section>
+
+  <section class="piso-card">
+    <h2 class="piso-h">Promo rates</h2>
+    <table class="piso-table">
+      <tbody id="ratesBody">
+        <tr><td>Loading rates...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <p class="piso-meta" id="clientInfo">Device: $(mac) | IP: $(ip)</p>
+</div>
+
+<!-- PAP login form: posts straight to the router's own login endpoint.
+     No dst -> RouterOS shows alogin.html, which lands on status.html. -->
+<form id="sendin" method="post" action="$(link-login-only)">
+  <input type="hidden" name="dst">
+  <input type="hidden" name="popup" value="false">
+  <input type="hidden" name="mac" value="$(mac)">
+  <input type="hidden" name="username">
+  <input type="hidden" name="password">
+</form>
+
+<script src="assets/portal.js"></script>
+</body>
+</html>

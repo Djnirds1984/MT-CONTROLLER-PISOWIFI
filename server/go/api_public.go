@@ -114,6 +114,15 @@ func (s *Store) defaultPulseMinutes() int {
 // Query ordering note: the store runs with one connection, so all rate
 // lookups happen AFTER the device rows are fully drained.
 func (s *Store) handleVendo(w http.ResponseWriter, r *http.Request) {
+	// The captive portal page is served by the router from flash/hotspot,
+	// so its /api/vendo fetch is cross-origin (router hotspot address ->
+	// SBC). Allow any caller: this endpoint only exposes public portal
+	// branding, vendo names and rate tiers.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	type rate struct {
 		Coins   int `json:"coins"`
 		Minutes int `json:"minutes"`

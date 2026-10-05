@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="0; url={{SBC_URL}}/?mac=$(mac)&ip=$(ip)&error=$(error)&link-login=$(link-login-only)&dst=$(link-orig-esc)">
+<meta http-equiv="refresh" content="0; url={{SBC_URL}}/?mac=$(mac-esc)&ip=$(ip-esc)&error=$(error-esc)&link-login=$(link-login-only-esc)&dst=$(link-orig-esc)">
 <title>WiFi</title>
 </head>
 <body>
 <p>Connecting to the WiFi portal...</p>
+<script>
+location.replace('{{SBC_URL}}/?mac=$(mac-esc)&ip=$(ip-esc)&error=$(error-esc)&link-login=$(link-login-only-esc)&dst=$(link-orig-esc)');
+</script>
 <!-- IAMNOTLOGINSTRINGPLEASEDONTREMOVE -->
-<!-- AIRCOINS-STUB login v1 — thin redirector only; the full portal lives on the SBC. -->
+<!-- AIRCOINS-STUB login v2 — thin redirector only; the full portal lives on the SBC. -->
 </body>
 </html>

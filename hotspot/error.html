@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIRCOINS NETFI</title>
+<link rel="stylesheet" href="assets/piso.css">
+</head>
+<body>
+<!-- AIRCOINS NETFI hotspot error page — router-native, no redirect.
+     RouterOS fills $(error) and $(link-login) (the login link points
+     back at this same hotspot's login.html = the portal). -->
+<div class="piso-wrap">
+  <header class="piso-head">
+    <h1 class="piso-brand">AIRCOINS NETFI</h1>
+    <p class="piso-sub">Something went wrong</p>
+  </header>
+
+  <div class="piso-error">$(if error)$(error)$(else)Hotspot error.$(endif)</div>
+
+  <section class="piso-card">
+    <a class="piso-btn piso-btn-wide" href="$(link-login)">Back to login</a>
+  </section>
+</div>
+</body>
+</html>

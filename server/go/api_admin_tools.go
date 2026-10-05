@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -406,62 +405,12 @@ func (s *Store) stubsFill(w http.ResponseWriter, local map[string][]byte, remote
 }
 
 func (s *Store) handleStubsUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	var in struct {
-		Names []string `json:"names"`
-	}
-	if !readJSON(w, r, &in) {
-		return
-	}
-	sbc := s.getSetting("sbc_url", "")
-	if sbc == "" {
-		respondError(w, http.StatusBadRequest, "set sbc_url in Settings first (router-reachable portal URL)")
-		return
-	}
-	rc := routerActive(s)
-	if rc == nil {
-		respondError(w, http.StatusBadRequest, "router not configured in Settings")
-		return
-	}
-	all, err := stubList()
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	want := in.Names
-	if len(want) == 0 {
-		for name := range all {
-			want = append(want, name)
-		}
-	}
-	results := []map[string]any{}
-	for _, name := range want {
-		content, ok := all[name]
-		if !ok {
-			results = append(results, map[string]any{"name": name, "ok": false, "error": "unknown stub"})
-			continue
-		}
-		content = bytes.ReplaceAll(content, []byte("{{SBC_URL}}"), []byte(sbc))
-		err := rc.uploadStub(stubRemoteDir+"/"+name, content)
-		entry := map[string]any{"name": name, "ok": err == nil}
-		if err != nil {
-			entry["error"] = err.Error()
-		}
-		results = append(results, entry)
-	}
-	// Read-back verification: never trust the write path alone.
-	remote, rerr := rc.remoteStubMap(stubRemoteDir)
-	for _, res := range results {
-		name, _ := res["name"].(string)
-		if res["ok"] == true && rerr == nil {
-			if _, ok := remote[name]; !ok {
-				res["ok"] = false
-				res["error"] = "upload reported success but file is not on the router"
-			}
-		}
-	}
-	respondJSON(w, http.StatusOK, map[string]any{"ok": true, "results": results})
+	// DISABLED (operator decision, 2026-10-05): flash/hotspot now hosts the
+	// complete self-contained captive portal (repo hotspot/ — panel design,
+	// RADIUS PAP login, no redirect chain). Pushing redirect stubs would
+	// overwrite the portal pages and re-create the interception redirect
+	// loop observed on the live router. Deploy portal files manually via
+	// WinBox instead.
+	respondError(w, http.StatusGone,
+		"stub upload disabled: the router hosts the full captive portal; upload the repo hotspot/ folder via WinBox")
 }

@@ -575,8 +575,37 @@ func (s *Store) handleMTApply(w http.ResponseWriter, r *http.Request) {
 				"action": "accept", "dst-address": ip, "protocol": "tcp",
 				"dst-port": "80", "comment": mtComment,
 			}, nil)
+			// The portal itself is served by the router (flash/hotspot); the
+			// SBC rule above keeps /api/vendo (rates + vendo list) and the
+			// admin panel reachable before login. Coin insertion also runs
+			// pre-login and talks straight to each vendo NodeMCU, so every
+			// configured device IP needs its own accept rule.
+			if vrows, qerr := s.App.Query(`SELECT api_url FROM vendo_devices WHERE enabled = 1`); qerr == nil {
+				for vrows.Next() {
+					var apiURL string
+					if serr := vrows.Scan(&apiURL); serr != nil {
+						continue
+					}
+					vu, perr := url.Parse(apiURL)
+					if perr != nil {
+						continue
+					}
+					vh := vu.Hostname()
+					if vh == "" || net.ParseIP(vh) == nil {
+						continue
+					}
+					if aerr := rc.json(http.MethodPut, gardenPath, map[string]any{
+						"action": "accept", "dst-address": vh, "protocol": "tcp",
+						"comment": mtComment,
+					}, nil); aerr != nil && err == nil {
+						err = aerr
+					}
+					gDetail += " + vendo " + vh
+				}
+				vrows.Close()
+			}
 			// Portal served under a hostname instead of the raw IP? Add a
-			// host rule too so the stub redirect target resolves.
+			// host rule too so the panel URL resolves.
 			host := ""
 			if u, perr := url.Parse(s.getSetting("sbc_url", "")); perr == nil {
 				host = u.Hostname()

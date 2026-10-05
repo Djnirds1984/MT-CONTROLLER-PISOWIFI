@@ -9,10 +9,10 @@
 <p>Returning to the portal...</p>
 <script>
 var q = '?error=' + encodeURIComponent('$(error)') +
-        '&mac=$(mac)&ip=$(ip)' +
-        '&link-login=$(link-login-only)&dst=$(link-orig-esc)';
+        '&mac=$(mac-esc)&ip=$(ip-esc)' +
+        '&link-login=$(link-login-only-esc)&dst=$(link-orig-esc)';
 location.replace('{{SBC_URL}}/' + q);
 </script>
-<!-- AIRCOINS-STUB error v1 — thin redirector only. -->
+<!-- AIRCOINS-STUB error v2 — thin redirector only. -->
 </body>
 </html>
