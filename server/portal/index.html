@@ -17,6 +17,15 @@
   <div id="errBox" class="piso-error" hidden></div>
   <div id="infoBox" class="piso-info" hidden></div>
 
+  <!-- Recovery for pages reached WITHOUT the router redirect (direct
+       visit, stale bookmark, old logout bounce): no link-login/mac/ip
+       context, so the form has nowhere to post. app.js reveals this
+       link, which re-enters the captive flow by requesting a plain
+       HTTP URL the router will intercept again. -->
+  <p id="reopenWrap" class="piso-meta" hidden>This page has no WiFi login context.
+    <a class="piso-backlink" href="http://example.com/">Reopen the WiFi login page</a>
+  </p>
+
   <section class="piso-card">
     <h2 class="piso-h">Voucher code</h2>
     <div class="piso-row">

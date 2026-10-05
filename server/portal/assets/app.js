@@ -234,6 +234,13 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     primeForm();
+    if (!LOGIN_URL) {
+      /* Reached without router context (direct visit, stale bookmark,
+       * pre-fix logout bounce): reveal the one-tap recovery link. On
+       * the WiFi it re-triggers the hotspot interception, which
+       * re-delivers this page WITH link-login/mac/ip. */
+      $('reopenWrap').hidden = false;
+    }
     if (LOGGED_OUT) {
       show($('infoBox'), 'You are logged out. Buy a new code or insert coins to reconnect.', false);
     }
