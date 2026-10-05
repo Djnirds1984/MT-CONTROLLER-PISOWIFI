@@ -7,7 +7,16 @@
 </head>
 <body>
 <p>You are logged out.</p>
-<script>location.replace('{{SBC_URL}}/?logged_out=1');</script>
+<script>
+/* Carry the hotspot context (mac, ip, router login URL) back to the
+   portal so "buy a new code" / "insert coins" can log in again.
+   Without these params the portal dead-ends with "Login URL missing". */
+var q = '?logged_out=1' +
+        '&mac=' + encodeURIComponent('$(mac)') +
+        '&ip=' + encodeURIComponent('$(ip)') +
+        '&link-login=' + encodeURIComponent('$(link-login-only)');
+location.replace('{{SBC_URL}}/' + q);
+</script>
 <!-- AIRCOINS-STUB logout v1 — thin redirector only. -->
 </body>
 </html>
